@@ -22,6 +22,7 @@ import game.skill.mining.mineOre.MineOreAction
 import game.content.miningGuild.MiningGuild
 import io.luna.game.model.EntityState
 import io.luna.game.model.Position
+import io.luna.game.model.mob.interact.InteractionPolicy
 import io.luna.game.model.`object`.GameObject
 import java.util.*
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,8 +60,11 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
     override val reuseTargetOptions = false
 
     private var cluster: Position? = null
-    private var scoutTrips = 0
-    private val scouted = mutableListOf<Position>()
+    private var surveyZone: SubZone? = null
+    private var sites: List<MiningSites.Rock> = emptyList()
+    private val startingSites = ArrayDeque<MiningSites.Rock>()
+    private val surveyed = HashSet<Position>()
+    private var startingSitePending = true
     private val retryAfter = HashMap<Position, Long>()
 
     companion object {
@@ -148,22 +152,44 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         it in zones && (it != SubZone.MINING_GUILD || bot.mining.level >= MiningGuild.REQUIRED_LEVEL)
     }
 
-    override suspend fun onNewActiveZone(lastZone: SubZone?) { resetSearch() }
+    override suspend fun onNewActiveZone(lastZone: SubZone?) {
+        surveyZone = null
+        resetSearch()
+    }
 
     override suspend fun onBankOpenSkilling(initial: Boolean) { resetSearch() }
 
     private fun resetSearch() {
         cluster = null
-        scoutTrips = 0
-        scouted.clear()
+        surveyed.clear()
+        startingSitePending = true
         retryAfter.clear()
         behavior.settle()
     }
 
     /** Observes only visible rocks and players. The mine boundary also excludes neighboring chambers. */
     override suspend fun find(searchBase: Position, searchRadius: Int): MutableCollection<GameObject> {
-        if (!isActionSafe() || bot.inventory.isFull) return mutableListOf()
+        if (!isActionSafe() || forceBanking || bot.inventory.isFull) return mutableListOf()
         val zone = activeZone ?: return mutableListOf()
+        if (zone == SubZone.MINING_GUILD && bot.mining.level < MiningGuild.REQUIRED_LEVEL) return mutableListOf()
+        if (surveyZone != zone) {
+            sites = MiningSites.inZone(zone).filter { it.ore in ores }
+            startingSites.clear()
+            surveyZone = zone
+        }
+        if (startingSitePending) {
+            startingSitePending = false
+            // Each eligible starting rock gets a turn across bank trips; bots spread across the whole mine.
+            startingSites.removeIf { it.ore.level > bot.mining.level }
+            if (startingSites.isEmpty()) {
+                val eligible = sites.filter { it.ore.level <= bot.mining.level }
+                val preferred = eligible.filter { it.ore in preferredOres }.ifEmpty { eligible }
+                startingSites.addAll(preferred.shuffled())
+            }
+            startingSites.pollFirst()?.let { visitSite(zone, it) }
+            if (!isActionSafe() || bot.inventory.isFull) return mutableListOf()
+        }
+        observeSites()
         val origin = cluster?.takeIf { it.isWithinDistance(bot.position, Position.VIEWING_DISTANCE) }
             ?: bot.position.also { cluster = it; behavior.settle() }
         val now = System.nanoTime()
@@ -180,7 +206,7 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         if (candidates.isNotEmpty()) return candidates
         if (behavior.expand()) {
             bot.log("No suitable rocks in my cluster; expanding mining search to ${behavior.radius} tiles.")
-        } else if (scoutTrips < 2) {
+        } else {
             scout(zone)
         }
         return mutableListOf()
@@ -234,8 +260,6 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
                 bot.mining.experience > experience)
         if (started) {
             cluster = target.position
-            scoutTrips = 0
-            scouted.clear()
             behavior.settle()
         } else if (isActionSafe() && !bot.inventory.isFull && target.state == EntityState.ACTIVE) {
             retryAfter[target.position] = System.nanoTime() + 20.seconds.inWholeNanoseconds
@@ -243,27 +267,42 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         return started
     }
 
-    /** Walk to a different visible part of this mine, without inspecting ore availability beyond the player's view. */
+    /** Remember inspected map locations, including rocks that are currently depleted. */
+    private fun observeSites() {
+        sites.filter { it.position.isViewable(bot.position) }.forEach { surveyed += it.position }
+    }
+
+    /** Inspect the next unvisited rock cluster, using map geography without reading distant live ore states. */
     private suspend fun scout(zone: SubZone) {
-        if (!isActionSafe() || bot.inventory.isFull) return
-        val from = bot.position
-        val destinations = buildList {
-            for (dx in listOf(-10, 0, 10)) for (dy in listOf(-10, 0, 10)) {
-                if (dx == 0 && dy == 0) continue
-                val tile = from.translate(dx, dy)
-                if (zone.area.contains(tile) &&
-                    (zone == SubZone.MINING_GUILD || !SubZone.MINING_GUILD.area.contains(tile)) &&
-                    scouted.none { it.isWithinDistance(tile, MiningBehavior.LOCAL_RADIUS) } &&
-                    !world.collisionManager.isBlocked(tile, false)) add(tile)
-            }
-        }.shuffled()
-        scoutTrips++
-        scouted += from
-        if (destinations.isNotEmpty() &&
-            withTimeoutOrNull(15.seconds) { handler.webWalkToAny(destinations) } == true) {
+        if (!isActionSafe() || forceBanking || bot.inventory.isFull) return
+        val next = sites.filter { it.position !in surveyed && it.ore.level <= bot.mining.level }
+            .minWithOrNull(compareBy<MiningSites.Rock> { if (it.ore in preferredOres) 0 else 1 }
+                .thenBy { bot.position.computeLongestDistance(it.position) }) ?: return
+        visitSite(zone, next)
+    }
+
+    /** Native interaction geometry supplies legal stands for both 1x1 rocks and the 5x5 essence rocks. */
+    private suspend fun visitSite(zone: SubZone, site: MiningSites.Rock) {
+        if (!isActionSafe() || forceBanking || bot.inventory.isFull) return
+        val rock = site.placement.toGameObject(ctx)
+        val stands = handler.interactions.interactionStands(rock, InteractionPolicy.STANDARD_SIZE).filter {
+            zone.area.contains(it) &&
+                    (zone == SubZone.MINING_GUILD || !SubZone.MINING_GUILD.area.contains(it)) &&
+                    !world.collisionManager.isBlocked(it, false)
+        }
+        // An unreachable site is tried once per trip; the normal unsuccessful-search deadline still applies.
+        surveyed += site.position
+        val reached = stands.isNotEmpty() &&
+                withTimeoutOrNull(45.seconds) { handler.webWalkToAny(stands) } == true
+        if (!isActionSafe()) {
+            surveyed -= site.position
+            return
+        }
+        if (reached) {
             cluster = bot.position
             behavior.settle()
-            bot.log("Checking another mining cluster in $zone (scouting trip $scoutTrips of 2).")
+            observeSites()
+            bot.log("Inspecting mining rocks near ${site.position} in $zone; ${surveyed.size}/${sites.size} sites checked.")
         }
     }
 

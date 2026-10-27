@@ -579,10 +579,10 @@ enum class SubZone(
         area = SimpleBoxArea.of(2882, 4805, 2939, 4860),
         parent = { VARROCK }),
 
-    /** Working stand next to the northeast 5x5 essence rock, reached on foot after the wizard teleport. */
+    /** All four 5x5 essence rocks, with an initial stand near the northeast rock after the wizard teleport. */
     ESSENCE_MINE_ROCKS(
         inside = Position(2924, 4848),
-        area = SimpleBoxArea.of(2919, 4841, 2935, 4857),
+        area = SimpleBoxArea.of(2882, 4805, 2939, 4860),
         parent = { VARROCK }),
 
     /**
