@@ -88,6 +88,9 @@ abstract class TargetingZonedBotScript<E : Entity>(
     /** Activities with changing resource priorities can request a fresh view for each selection. */
     protected open val reuseTargetOptions: Boolean = true
 
+    /** Failed fresh searches before considering a crowded-area departure; ordinary activities keep ten. */
+    protected open val crowdedSearchLimit: Int = 10
+
     /** Monotonic clock, overridable for deterministic recovery tests. */
     protected open fun targetSearchTimeNanos(): Long = System.nanoTime()
 
@@ -221,7 +224,7 @@ abstract class TargetingZonedBotScript<E : Entity>(
             bot.naturalDecisionDelay()
             if (!targetActionReady()) return true
 
-            if (searchTimes >= 10) {
+            if (searchTimes >= crowdedSearchLimit) {
                 val visiblePlayers =
                     world.locator.findPlayers(zone.area.centerPosition, zone.area.tileRadius) { true }.size
 

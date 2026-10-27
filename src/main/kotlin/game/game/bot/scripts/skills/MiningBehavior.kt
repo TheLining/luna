@@ -12,19 +12,43 @@ import kotlin.time.Duration.Companion.seconds
  * @author TheLining
  */
 internal class MiningBehavior(personality: BotPersonality, preferred: Set<Ore>, ores: Set<Ore>) {
+    enum class Style { KIND, MEAN, COMPLAINER, POWER_MINER, BALANCED }
     enum class Competition { YIELDING, BALANCED, ASSERTIVE }
 
     private val dexterity = personality.dexterity.coerceIn(0.0, 1.0)
+    private val confidence = personality.confidence.coerceIn(0.0, 1.0)
+    val style = styleOf(personality)
     private val tiers = preferred.associateWith { 0 } +
             (ores - preferred).sortedByDescending { it.level }.mapIndexed { index, ore -> ore to index + 1 }
 
     val competition = when {
+        style == Style.KIND -> Competition.YIELDING
+        style == Style.MEAN -> Competition.ASSERTIVE
+        style == Style.COMPLAINER || style == Style.POWER_MINER -> Competition.BALANCED
         personality.kindness - personality.confidence >= 0.25 -> Competition.YIELDING
         personality.confidence - personality.kindness >= 0.25 -> Competition.ASSERTIVE
         else -> Competition.BALANCED
     }
-    val searchTimeout = (90 + 90 * (1.0 - dexterity)).seconds
-    var radius = LOCAL_RADIUS
+    val searchTimeout = when (style) {
+        Style.KIND -> 180.seconds
+        Style.MEAN -> (150 + 60 * confidence).seconds
+        Style.COMPLAINER -> (45 + 30 * (1.0 - dexterity)).seconds
+        Style.POWER_MINER -> 60.seconds
+        Style.BALANCED -> (90 + 90 * (1.0 - dexterity)).seconds
+    }
+    val crowdedSearchLimit = when (style) {
+        Style.KIND -> 20
+        Style.MEAN -> 30
+        Style.COMPLAINER -> 4
+        Style.POWER_MINER -> 6
+        Style.BALANCED -> 10
+    }
+    private val localRadius = when (style) {
+        Style.MEAN -> 8
+        Style.POWER_MINER -> 4
+        else -> LOCAL_RADIUS
+    }
+    var radius = localRadius
         private set
 
     /** Lower scores win. Balanced miners prefer free fallback ore to a contested preferred rock. */
@@ -35,21 +59,40 @@ internal class MiningBehavior(personality: BotPersonality, preferred: Set<Ore>, 
         val penalty = when (competition) {
             Competition.YIELDING -> if (competing > 0) return null else 0
             Competition.BALANCED -> if (competing > 1) return null else 1_000
-            Competition.ASSERTIVE -> if (competing > 2) return null else 45
+            Competition.ASSERTIVE -> {
+                val limit = if (style == Style.MEAN && confidence >= 0.7) 3 else if (confidence < 0.4) 1 else 2
+                if (competing > limit) return null
+                if (style == Style.MEAN) 20 else 45
+            }
         }
-        return tier * 100.0 + competing * penalty + distance * (0.5 + 1.5 * dexterity)
+        val distanceWeight = if (style == Style.POWER_MINER) 3.0 else 0.5 + 1.5 * dexterity
+        return tier * 100.0 + competing * penalty + distance * distanceWeight
     }
 
     /** Returns false once the bot has checked its entire visible neighborhood. */
     fun expand(): Boolean {
         if (radius == Position.VIEWING_DISTANCE) return false
-        radius = minOf(Position.VIEWING_DISTANCE, radius + 4)
+        val step = when (style) {
+            Style.COMPLAINER -> 5
+            Style.KIND, Style.POWER_MINER -> 3
+            else -> 4
+        }
+        radius = minOf(Position.VIEWING_DISTANCE, radius + step)
         return true
     }
 
-    fun settle() { radius = LOCAL_RADIUS }
+    fun settle() { radius = localRadius }
 
     companion object {
         const val LOCAL_RADIUS = 6
+
+        /** Mining styles specialize the bot's saved traits without replacing its global activity template. */
+        fun styleOf(personality: BotPersonality): Style = when {
+            personality.kindness >= 0.7 -> Style.KIND
+            personality.dexterity >= 0.7 && personality.intelligence >= 0.6 -> Style.POWER_MINER
+            personality.kindness <= 0.3 || personality.confidence - personality.kindness >= 0.35 -> Style.MEAN
+            personality.social >= 0.7 && personality.dexterity < 0.7 -> Style.COMPLAINER
+            else -> Style.BALANCED
+        }
     }
 }

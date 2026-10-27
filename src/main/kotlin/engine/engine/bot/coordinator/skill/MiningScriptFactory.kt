@@ -5,6 +5,8 @@ import api.bot.script.recentEscape
 import api.bot.zone.SubZone
 import api.predef.*
 import game.bot.scripts.skills.MineBotScript
+import game.bot.scripts.skills.MiningBehavior
+import game.bot.scripts.skills.MiningBehavior.Style
 import game.content.miningGuild.MiningGuild
 import game.content.craftingGuild.CraftingGuild
 import engine.bot.gear.BotItemTracker.Companion.itemTracker
@@ -18,6 +20,7 @@ import io.luna.game.model.mob.bot.Bot
  * from essence/basic ores to gold, coal, gems, and high-tier metals. Shilo gem rocks are available to
  * casual trainers and profit miners at level 40. Crafting Guild rocks also require current Crafting 40 and
  * an owned brown apron. The Mining Guild retains its existing preference once accessible.
+ * Power-mining training selects iron outside the guild; collecting sessions continue to bank their ores.
  *
  * @author lare96
  */
@@ -53,9 +56,14 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
      * Selects a complete mining activity with the existing personality rule.
      */
     private fun createScript(bot: Bot, level: Int, zones: MutableList<SubZone>, training: Boolean): MineBotScript {
+        val powerMining = training && level >= IRON.level && MiningBehavior.styleOf(bot.personality) == Style.POWER_MINER
         val options = activities(bot, level, training)
         val guild = options.firstOrNull { SubZone.MINING_GUILD in it.zones && prefersGuild(bot, training) }
-        val activity = guild ?: getBestSkillingActivity(bot, level, { it.level }, options)
+        val powerMethod = if (powerMining) options
+            .filter { method -> method.zones.none { bot.recentEscape?.avoids(it) == true } }.ifEmpty { options }
+            .sortedBy { method -> method.zones.minOf { bot.position.computeLongestDistance(it.inside) } }
+            .take(3).randomOrNull() else null
+        val activity = powerMethod ?: guild ?: getBestSkillingActivity(bot, level, { it.level }, options)
             ?: error("No mining activity is available at level $level.")
         zones.clear()
         zones.addAll(activity.zones)
@@ -69,19 +77,20 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
                 if (IRON in activity.tokens) setOf(IRON) else setOf(COAL).intersect(activity.tokens)
             else -> activity.tokens.filterTo(linkedSetOf()) { ore -> ore.level == activity.tokens.maxOf { it.level } }
         }.ifEmpty { activity.tokens }
-        return MineBotScript(bot, activity.tokens, getDuration(bot), zones, preferred)
+        return MineBotScript(bot, activity.tokens, getDuration(bot), zones, preferred, powerMining)
     }
 
     /**
      * Keeps ore and access decisions in the mining factory rather than adding a generic policy system.
      */
     internal fun activities(bot: Bot, level: Int, training: Boolean): List<BotSkillingActivity<Ore>> {
+        val powerTraining = training && level >= IRON.level && MiningBehavior.styleOf(bot.personality) == Style.POWER_MINER
         val efficient = bot.personality.isDextrous || bot.personality.isIntelligent
         val desired = (if (training) trainingOres(bot, level) else profitOres(bot, level)).let {
             if (level >= GEM_ROCK.level && (!training || !efficient)) it + GEM_ROCK else it
         }.let {
             // Coal cushions scarcity for metal collectors; essence and gem-only methods remain separate.
-            if (training && efficient && level >= MiningGuild.REQUIRED_LEVEL ||
+            if (!powerTraining && training && efficient && level >= MiningGuild.REQUIRED_LEVEL ||
                 level >= COAL.level && it.any { ore -> ore in setOf(SILVER, GOLD, MITHRIL, ADAMANT, RUNE) }) it + COAL
             else it
         }
@@ -103,7 +112,8 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
                 continue
             }
             val tokens = linkedSetOf<Ore>()
-            val mineOres = if (zone == SubZone.MINING_GUILD && training && efficient) setOf(COAL, MITHRIL) else desired
+            val mineOres = if (zone == SubZone.MINING_GUILD && training && efficient && !powerTraining)
+                setOf(COAL, MITHRIL) else desired
             for (ore in mineOres) {
                 if (ore in supported && ore.level <= level) {
                     tokens.add(ore)
@@ -118,6 +128,7 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
 
     /** A recent escape prevents a guild preference from sending the bot straight back to an attacker. */
     private fun prefersGuild(bot: Bot, training: Boolean): Boolean =
+        !(training && MiningBehavior.styleOf(bot.personality) == Style.POWER_MINER) &&
         (if (training) bot.personality.isDextrous || bot.personality.isIntelligent else bot.personality.isIntelligent) &&
                 bot.recentEscape?.avoids(SubZone.MINING_GUILD) != true
 
@@ -127,6 +138,9 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
     private fun trainingOres(bot: Bot, level: Int): Set<Ore> {
         if (level < IRON.level) {
             return setOf(COPPER, TIN, CLAY)
+        }
+        if (MiningBehavior.styleOf(bot.personality) == Style.POWER_MINER) {
+            return setOf(IRON)
         }
         if (bot.personality.isDextrous || bot.personality.isIntelligent) {
             val coalChance = if (bot.personality.isDextrous) 1.0 / 3.0 else 0.5

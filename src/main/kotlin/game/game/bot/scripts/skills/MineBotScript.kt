@@ -16,12 +16,16 @@ import api.predef.*
 import com.google.gson.JsonObject
 import engine.bot.coordinator.skill.RunecraftingScriptFactory
 import engine.bot.coordinator.skill.SmithingScriptFactory
+import engine.bot.speech.BotMiningSpeechPool
+import engine.bot.speech.BotMiningSpeechPool.Reaction
+import game.bot.scripts.skills.MiningBehavior.Style
 import game.skill.mining.Ore
 import game.skill.mining.Pickaxe
 import game.skill.mining.mineOre.MineOreAction
 import game.content.miningGuild.MiningGuild
 import io.luna.game.model.EntityState
 import io.luna.game.model.Position
+import io.luna.game.model.item.GroundItem
 import io.luna.game.model.mob.interact.InteractionPolicy
 import io.luna.game.model.`object`.GameObject
 import java.util.*
@@ -36,8 +40,9 @@ import kotlin.time.Duration.Companion.seconds
  * pickaxe selection, emergency pickaxe fallback, level requirements, and serialization data.
  *
  * Prefers configured ores within a small cluster, uses fallback ores when they are unavailable or contested, and
- * widens its visible search before scouting or moving mines. Kindness and confidence govern competition; dexterity
- * governs patience. Active mining is never interrupted just because another rock becomes available.
+ * widens its visible search before scouting or moving mines. Kind, mean, complaining, and power-mining styles govern
+ * competition, patience, reactions, and training inventory handling. Active mining is never interrupted just because
+ * another rock becomes available.
  * Crafting Guild sessions reserve the chest slot for an owned brown apron and recheck
  * the native entry requirements before every work-zone trip, including return travel after banking.
  *
@@ -46,17 +51,21 @@ import kotlin.time.Duration.Companion.seconds
  * @param duration How long this script should continue running before completing normally.
  * @param zones The candidate zones this script may operate in.
  * @param preferredOres Preferred ores; other configured ores are fallbacks, ordered by their Mining requirement.
+ * @param powerMining Whether this is an iron-training session that may discard ore through normal drop clicks.
  *
  * @author lare96
  */
 class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: MutableList<SubZone>,
-                    preferredOres: Set<Ore> = ores) :
+                    preferredOres: Set<Ore> = ores, powerMining: Boolean = false) :
     SkillingBotScript<GameObject>(bot, duration, zones, bot.mining) {
 
     /** Other configured ores are fallbacks, ordered from the highest requirement down. */
     val preferredOres: Set<Ore> = preferredOres.intersect(ores).ifEmpty { ores }
     internal val behavior = MiningBehavior(bot.personality, this.preferredOres, ores)
+    /** Only factory-selected iron training sessions discard ore; resource collection keeps banking. */
+    val powerMining = powerMining && behavior.style == Style.POWER_MINER && ores == setOf(Ore.IRON)
     override val targetSearchTimeout = behavior.searchTimeout
+    override val crowdedSearchLimit = behavior.crowdedSearchLimit
     override val reuseTargetOptions = false
 
     private var cluster: Position? = null
@@ -66,6 +75,10 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
     private val surveyed = HashSet<Position>()
     private var startingSitePending = true
     private val retryAfter = HashMap<Position, Long>()
+    private var frustrations = 0
+    private var dropFailures = 0
+    private var attemptedRock: GameObject? = null
+    private var attemptExperience = 0.0
 
     companion object {
 
@@ -82,6 +95,7 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
              */
             var ores = emptySet<Ore>()
             var preferredOres = emptySet<Ore>()
+            var powerMining = false
 
             override fun load(data: JsonObject) {
                 super.load(data)
@@ -90,6 +104,7 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
                 preferredOres = if (data.has("preferredOres"))
                     loadEnumSet("preferredOres", data) { Ore.valueOf(it) }.intersect(ores).ifEmpty { ores }
                 else ores
+                powerMining = data.get("powerMining")?.asBoolean ?: false
                 // Mining uses working stands near the rocks rather than shared village/combat/teleport anchors.
                 zones = zones.map { zone ->
                     when (zone) {
@@ -108,6 +123,7 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
                 super.save(data)
                 saveEnumSet("ores", data, ores)
                 saveEnumSet("preferredOres", data, preferredOres)
+                data.addProperty("powerMining", powerMining)
             }
         }
     }
@@ -118,7 +134,7 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
      * @param bot The bot running this script.
      * @param data The saved Mining script data to restore from.
      */
-    constructor(bot: Bot, data: MineData) : this(bot, data.ores, data.duration, data.zones, data.preferredOres)
+    constructor(bot: Bot, data: MineData) : this(bot, data.ores, data.duration, data.zones, data.preferredOres, data.powerMining)
 
     /**
      * The rock object ids that match the configured [ores].
@@ -131,7 +147,7 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         for (ore in ores) {
             ids.addAll(Ore.ORE_MAP[ore])
         }
-        bot.log("Mining ores: $ores")
+        bot.log("Mining ores: $ores; preferred=$preferredOres; style=${behavior.style}; powerMining=$powerMining")
         ids
     }
 
@@ -157,7 +173,10 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         resetSearch()
     }
 
-    override suspend fun onBankOpenSkilling(initial: Boolean) { resetSearch() }
+    override suspend fun onBankOpenSkilling(initial: Boolean) {
+        dropFailures = 0
+        resetSearch()
+    }
 
     private fun resetSearch() {
         cluster = null
@@ -165,6 +184,31 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         startingSitePending = true
         retryAfter.clear()
         behavior.settle()
+    }
+
+    /** Dropped training ore must not trigger the loot reflex to pick it straight back up. */
+    override fun allowsLoot(item: GroundItem): Boolean = !powerMining || item.id != Ore.IRON.item
+
+    override suspend fun handleFullInventory(): Boolean {
+        if (!powerMining || dropFailures >= 3) return false
+        if (!isActionSafe() || bot.actions.first(MineOreAction::class.java) != null) return true
+        // Use normal inventory clicks, one ore at a time. Keep the pickaxe, gems, and every other item.
+        repeat(28) {
+            if (!isActionSafe()) return true
+            val before = bot.inventory.computeAmountForId(Ore.IRON.item)
+            if (before == 0) {
+                dropFailures = 0
+                return !bot.inventory.isFull
+            }
+            val dropped = handler.inventory.dropItem(Ore.IRON.item)
+            if (!isActionSafe()) return true
+            if (!dropped || bot.inventory.computeAmountForId(Ore.IRON.item) >= before) {
+                dropFailures++
+                return dropFailures < 3 // Failed native drops eventually fall back to banking.
+            }
+            dropFailures = 0
+        }
+        return !bot.inventory.isFull
     }
 
     /** Observes only visible rocks and players. The mine boundary also excludes neighboring chambers. */
@@ -184,7 +228,13 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
             if (startingSites.isEmpty()) {
                 val eligible = sites.filter { it.ore.level <= bot.mining.level }
                 val preferred = eligible.filter { it.ore in preferredOres }.ifEmpty { eligible }
-                startingSites.addAll(preferred.shuffled())
+                val starts = preferred.shuffled().toMutableList()
+                if (behavior.style == Style.POWER_MINER) {
+                    starts.sortWith(compareByDescending<MiningSites.Rock> { site ->
+                        preferred.count { it.position.isWithinDistance(site.position, 4) }
+                    }.thenBy { bot.position.computeLongestDistance(it.position) })
+                }
+                startingSites.addAll(starts)
             }
             startingSites.pollFirst()?.let { visitSite(zone, it) }
             if (!isActionSafe() || bot.inventory.isFull) return mutableListOf()
@@ -195,10 +245,20 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         val now = System.nanoTime()
         retryAfter.entries.removeIf { it.value <= now }
         val miners = visibleMiners()
-        val candidates = world.locator.findObjects(bot.position, Position.VIEWING_DISTANCE) { rock ->
+        val visibleRocks = world.locator.findObjects(bot.position, Position.VIEWING_DISTANCE) { rock ->
             validRock(rock) && rock.position.isWithinDistance(origin, behavior.radius) &&
                     rock.position !in retryAfter
-        }.mapNotNull { rock ->
+        }
+        val contestedPreferred = visibleRocks.any { rock ->
+            val ore = Ore.ROCK_MAP.getValue(rock.id)
+            ore in preferredOres && ore.respawnTicks != null && (miners[rock.position] ?: 0) > 0
+        }
+        if (contestedPreferred) {
+            if (behavior.style == Style.KIND) BotMiningSpeechPool.react(bot, Reaction.YIELD)
+            else if (behavior.style == Style.COMPLAINER && ++frustrations >= 2)
+                BotMiningSpeechPool.react(bot, Reaction.CROWDED)
+        }
+        val candidates = visibleRocks.mapNotNull { rock ->
             val score = behavior.score(Ore.ROCK_MAP.getValue(rock.id), miners[rock.position] ?: 0,
                                       bot.position.computeLongestDistance(rock.position))
             score?.let { rock to it }
@@ -218,8 +278,24 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
     /** A working rock remains the focus even if a better ore respawns during an unsuccessful swing. */
     override suspend fun refocus(): Boolean = bot.actions.first(MineOreAction::class.java) == null
 
-    /** Pausing clears the cached focus; an unfinished native action still owns the next rock decision on resume. */
-    override suspend fun beforeZoneWork(): Boolean = bot.actions.first(MineOreAction::class.java) != null
+    /** Preserve ongoing mining on resume, and empty a power-miner's inventory before another target search. */
+    override suspend fun beforeZoneWork(): Boolean {
+        if (bot.actions.first(MineOreAction::class.java) != null) return true
+        finishMiningAttempt()
+        if (powerMining && bot.inventory.isFull && !forceBanking) return handleFullInventory()
+        return false
+    }
+
+    /** An accepted click can still lose the ore to another miner several swings later. */
+    private fun finishMiningAttempt() {
+        val rock = attemptedRock ?: return
+        attemptedRock = null
+        if (bot.mining.experience > attemptExperience) {
+            if (Ore.ROCK_MAP[rock.id] in preferredOres) frustrations = 0
+        } else if (rock.state != EntityState.ACTIVE && behavior.style == Style.COMPLAINER && ++frustrations >= 2) {
+            BotMiningSpeechPool.react(bot, Reaction.LOST_ROCK)
+        }
+    }
 
     private fun validRock(rock: GameObject): Boolean {
         val zone = activeZone ?: return false
@@ -261,8 +337,16 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         if (started) {
             cluster = target.position
             behavior.settle()
+            attemptedRock = target
+            attemptExperience = experience
+            if (bot.actions.first(MineOreAction::class.java) == null) finishMiningAttempt()
+            if (behavior.style == Style.MEAN && (visibleMiners()[target.position] ?: 0) > 0)
+                BotMiningSpeechPool.react(bot, Reaction.CONTEST)
         } else if (isActionSafe() && !bot.inventory.isFull && target.state == EntityState.ACTIVE) {
             retryAfter[target.position] = System.nanoTime() + 20.seconds.inWholeNanoseconds
+        } else if (isActionSafe() && target.state != EntityState.ACTIVE &&
+            behavior.style == Style.COMPLAINER && ++frustrations >= 2) {
+            BotMiningSpeechPool.react(bot, Reaction.LOST_ROCK)
         }
         return started
     }
@@ -318,13 +402,14 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         val data = MineData()
         data.ores = ores
         data.preferredOres = preferredOres
+        data.powerMining = powerMining
         data.duration = duration
         data.zones = originalZones.toMutableList()
         return data
     }
 
     override suspend fun completed() {
-        if (ores == setOf(Ore.GEM_ROCK)) return
+        if (powerMining || ores == setOf(Ore.GEM_ROCK)) return
         // Chance to queue a smelting, smithing, or runecrafting script.
         if (rand(bot.personality.intelligence) || bot.personality.isDextrous) {
             val script =

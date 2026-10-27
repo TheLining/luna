@@ -1,0 +1,26 @@
+{
+  "YIELD": [
+    "all yours, i'll try another rock",
+    "i'll leave that one to you",
+    "i can mine over here",
+    "no worries, i'll find a free rock"
+  ],
+  "CONTEST": [
+    "not giving up this spot",
+    "i'm staying for this one",
+    "see who gets it first",
+    "this rock's worth a try"
+  ],
+  "CROWDED": [
+    "every rock is taken",
+    "might try another part of the mine",
+    "hard to get any ore here",
+    "this mine is getting crowded"
+  ],
+  "LOST_ROCK": [
+    "someone always gets there first",
+    "there goes another one",
+    "can't get a rock to myself",
+    "i was just about to mine that"
+  ]
+}
