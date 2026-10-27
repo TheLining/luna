@@ -30,12 +30,14 @@ internal class MiningBehavior(personality: BotPersonality, preferred: Set<Ore>, 
     /** Lower scores win. Balanced miners prefer free fallback ore to a contested preferred rock. */
     fun score(ore: Ore, competitors: Int, distance: Int): Double? {
         val tier = tiers[ore] ?: return null
+        // Essence and other inexhaustible rocks can be shared without competing for their ore.
+        val competing = if (ore.respawnTicks == null) 0 else competitors
         val penalty = when (competition) {
-            Competition.YIELDING -> if (competitors > 0) return null else 0
-            Competition.BALANCED -> if (competitors > 1) return null else 1_000
-            Competition.ASSERTIVE -> if (competitors > 2) return null else 45
+            Competition.YIELDING -> if (competing > 0) return null else 0
+            Competition.BALANCED -> if (competing > 1) return null else 1_000
+            Competition.ASSERTIVE -> if (competing > 2) return null else 45
         }
-        return tier * 100.0 + competitors * penalty + distance * (0.5 + 1.5 * dexterity)
+        return tier * 100.0 + competing * penalty + distance * (0.5 + 1.5 * dexterity)
     }
 
     /** Returns false once the bot has checked its entire visible neighborhood. */

@@ -172,6 +172,12 @@ enum class SubZone(
         area = SimpleBoxArea.ofRadius(2816, 2944, 64, 64),
         parent = { KARAMJA }),
 
+    /** Seven surface gem rocks from the 377 cache, with an unblocked stand among the rocks. */
+    SHILO_VILLAGE_MINE(
+        inside = Position(2823, 3001),
+        area = SimpleBoxArea.of(2818, 2996, 2827, 3005),
+        parent = { KARAMJA }),
+
     /**
      * Yanille's sandpit at (2542, 3103), used to fill owned buckets for glassmaking.
      */
@@ -396,8 +402,8 @@ enum class SubZone(
      * - 2 coal rocks
      */
     FALADOR_WEST_MINE(
-        inside = Position(2912, 3355),
-        area = SimpleBoxArea.ofRadius(2898, 3349, 28, 24),
+        inside = Position(2907, 3360),
+        area = SimpleBoxArea.of(2901, 3351, 2912, 3368),
         parent = { FALADOR }),
 
     /**
@@ -414,6 +420,15 @@ enum class SubZone(
     DWARVEN_MINE(
         inside = Position(3058, 9776),
         area = SimpleBoxArea.ofRadius(2959, 9753, 110, 104),
+        parent = { FALADOR }),
+
+    /**
+     * The 53 rocks reachable from the Dwarven Mine staircase in the 377 cache. The working stand is near
+     * the southern ore clusters; the separate guild chamber ends at y=9756.
+     */
+    DWARVEN_MINE_ROCKS(
+        inside = Position(3042, 9768),
+        area = SimpleBoxArea.of(3018, 9757, 3061, 9831),
         parent = { FALADOR }),
 
     /**
@@ -564,6 +579,12 @@ enum class SubZone(
         area = SimpleBoxArea.of(2882, 4805, 2939, 4860),
         parent = { VARROCK }),
 
+    /** Working stand next to the northeast 5x5 essence rock, reached on foot after the wizard teleport. */
+    ESSENCE_MINE_ROCKS(
+        inside = Position(2924, 4848),
+        area = SimpleBoxArea.of(2919, 4841, 2935, 4857),
+        parent = { VARROCK }),
+
     /**
      * The Draynor bank and surrounding areas. Intended mainly for low-level fishers and dexterous/low-level
      * woodcutters. Low-level dumb bots may also train combat here.
@@ -637,7 +658,7 @@ enum class SubZone(
      * - 2 adamant rocks
      */
     EDGEVILLE_DUNGEON_MINE(
-        inside = Position(3132, 9874),
+        inside = Position(3137, 9875),
         entrance = { Position(3115, 3448) },
         area = SimpleBoxArea.of(3134, 9867, 3143, 9880),
         parent = { VARROCK }),
@@ -711,8 +732,8 @@ enum class SubZone(
      * - 2 adamant rocks
      */
     SOUTH_LUMBRIDGE_MINE(
-        inside = Position(3233, 3150),
-        area = SimpleBoxArea.of(3219, 3139, 3248, 3162),
+        inside = Position(3241, 3165),
+        area = SimpleBoxArea.of(3231, 3155, 3245, 3169),
         parent = { LUMBRIDGE }),
 
     /**
@@ -747,6 +768,18 @@ enum class SubZone(
         area = SimpleBoxArea.of(3288, 3271, 3312, 3324),
         parent =
             { AL_KHARID }),
+
+    /** The northern 377 rock cluster: 3 copper, 1 tin, 7 iron, 5 silver, 3 coal, 2 mithril and 2 adamantite. */
+    AL_KHARID_NORTH_MINE(
+        inside = Position(3301, 3311),
+        area = SimpleBoxArea.of(3291, 3297, 3307, 3320),
+        parent = { AL_KHARID }),
+
+    /** The separate southern cluster contains two gold and two iron rocks in the 377 cache. */
+    AL_KHARID_GOLD_MINE(
+        inside = Position(3298, 3285),
+        area = SimpleBoxArea.of(3292, 3279, 3308, 3290),
+        parent = { AL_KHARID }),
 
     /**
      * The flax field south-east of Seers' Village. Intended for money-makers.
@@ -892,7 +925,7 @@ enum class SubZone(
      * - 4 coal rocks
      */
     SOUTH_EAST_ARDOUGNE_MINE(
-        inside = Position(2601, 3240),
+        inside = Position(2598, 3229),
         area = SimpleBoxArea.of(2579, 3215, 2625, 3240),
         parent =
             { ARDOUGNE }),

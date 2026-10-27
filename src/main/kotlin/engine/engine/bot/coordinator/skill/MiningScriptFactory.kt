@@ -29,17 +29,18 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
         SubZone.VARROCK_SW_MINE to setOf(CLAY, TIN, IRON, SILVER),
         SubZone.VARROCK_SE_MINE to setOf(COPPER, TIN, IRON),
         SubZone.FALADOR_WEST_MINE to setOf(COPPER, TIN, IRON, COAL),
-        SubZone.DWARVEN_MINE to setOf(CLAY, COPPER, TIN, IRON, COAL, GOLD, MITHRIL, ADAMANT),
+        SubZone.DWARVEN_MINE_ROCKS to setOf(CLAY, COPPER, TIN, IRON, COAL, GOLD, MITHRIL, ADAMANT),
         SubZone.CRAFTING_GUILD_MINE to setOf(CLAY, SILVER, GOLD),
         SubZone.MINING_GUILD to setOf(COAL, MITHRIL),
         SubZone.LEGENDS_GUILD_MINE to setOf(IRON, COAL),
         SubZone.SOUTH_EAST_ARDOUGNE_MINE to setOf(IRON, COAL),
-        SubZone.AL_KHARID_MINE to setOf(COPPER, TIN, IRON, SILVER, COAL, GOLD, MITHRIL, ADAMANT),
+        SubZone.AL_KHARID_NORTH_MINE to setOf(COPPER, TIN, IRON, SILVER, COAL, MITHRIL, ADAMANT),
+        SubZone.AL_KHARID_GOLD_MINE to setOf(IRON, GOLD),
         SubZone.SOUTH_LUMBRIDGE_MINE to setOf(COAL, MITHRIL, ADAMANT),
         SubZone.EDGEVILLE_DUNGEON_MINE to setOf(COPPER, TIN, IRON, SILVER, COAL, MITHRIL, ADAMANT),
         SubZone.RELLEKKA_MINE to setOf(CLAY, SILVER, COAL),
-        SubZone.ESSENCE_MINE to setOf(RUNE_ESSENCE),
-        SubZone.SHILO_VILLAGE to setOf(GEM_ROCK)
+        SubZone.ESSENCE_MINE_ROCKS to setOf(RUNE_ESSENCE),
+        SubZone.SHILO_VILLAGE_MINE to setOf(GEM_ROCK)
     )
 
     override fun getTrainingScript(bot: Bot, level: Int, zones: MutableList<SubZone>): BotScript =
@@ -94,7 +95,8 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
                 (level < MiningGuild.REQUIRED_LEVEL || bot.mining.level < MiningGuild.REQUIRED_LEVEL)) {
                 continue
             }
-            if (training && zone == SubZone.AL_KHARID_MINE && bot.combatLevel <= 30) {
+            if (training && zone in setOf(SubZone.AL_KHARID_NORTH_MINE, SubZone.AL_KHARID_GOLD_MINE) &&
+                bot.combatLevel <= 30) {
                 continue
             }
             if (training && zone == SubZone.EDGEVILLE_DUNGEON_MINE) {

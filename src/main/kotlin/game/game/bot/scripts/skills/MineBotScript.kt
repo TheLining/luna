@@ -86,6 +86,18 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
                 preferredOres = if (data.has("preferredOres"))
                     loadEnumSet("preferredOres", data) { Ore.valueOf(it) }.intersect(ores).ifEmpty { ores }
                 else ores
+                // Mining uses working stands near the rocks rather than shared village/combat/teleport anchors.
+                zones = zones.map { zone ->
+                    when (zone) {
+                        SubZone.DWARVEN_MINE -> SubZone.DWARVEN_MINE_ROCKS
+                        SubZone.SHILO_VILLAGE -> SubZone.SHILO_VILLAGE_MINE
+                        SubZone.ESSENCE_MINE -> SubZone.ESSENCE_MINE_ROCKS
+                        SubZone.AL_KHARID_MINE -> if (Ore.GOLD in preferredOres &&
+                            preferredOres.none { it.level > Ore.GOLD.level }) SubZone.AL_KHARID_GOLD_MINE
+                            else SubZone.AL_KHARID_NORTH_MINE
+                        else -> zone
+                    }
+                }.distinct().toMutableList()
             }
 
             override fun save(data: JsonObject) {
