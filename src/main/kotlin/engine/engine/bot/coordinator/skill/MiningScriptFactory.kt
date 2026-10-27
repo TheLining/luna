@@ -31,7 +31,7 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
         SubZone.FALADOR_WEST_MINE to setOf(COPPER, TIN, IRON, COAL),
         SubZone.DWARVEN_MINE to setOf(CLAY, COPPER, TIN, IRON, COAL, GOLD, MITHRIL, ADAMANT),
         SubZone.CRAFTING_GUILD_MINE to setOf(CLAY, SILVER, GOLD),
-        SubZone.MINING_GUILD to setOf(IRON, COAL, MITHRIL, ADAMANT, RUNE),
+        SubZone.MINING_GUILD to setOf(COAL, MITHRIL),
         SubZone.LEGENDS_GUILD_MINE to setOf(IRON, COAL),
         SubZone.SOUTH_EAST_ARDOUGNE_MINE to setOf(IRON, COAL),
         SubZone.AL_KHARID_MINE to setOf(COPPER, TIN, IRON, SILVER, COAL, GOLD, MITHRIL, ADAMANT),
@@ -52,11 +52,23 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
      * Selects a complete mining activity with the existing personality rule.
      */
     private fun createScript(bot: Bot, level: Int, zones: MutableList<SubZone>, training: Boolean): MineBotScript {
-        val activity = getBestSkillingActivity(bot, level, { it.level }, activities(bot, level, training))
+        val options = activities(bot, level, training)
+        val guild = options.firstOrNull { SubZone.MINING_GUILD in it.zones && prefersGuild(bot, training) }
+        val activity = guild ?: getBestSkillingActivity(bot, level, { it.level }, options)
             ?: error("No mining activity is available at level $level.")
         zones.clear()
         zones.addAll(activity.zones)
-        return MineBotScript(bot, activity.tokens, getDuration(bot), zones)
+        // Retain other compatible mines for bounded recovery after local expansion/scouting is exhausted.
+        val alternatives = options.filter { other -> other.tokens.any { it in activity.tokens } }
+            .flatMap { it.zones }.distinct().filter { it !in zones && bot.recentEscape?.avoids(it) != true }
+            .sortedBy { bot.position.computeLongestDistance(it.inside) }
+        zones.addAll(alternatives)
+        val preferred = when {
+            training && (bot.personality.isDextrous || bot.personality.isIntelligent) ->
+                if (IRON in activity.tokens) setOf(IRON) else setOf(COAL).intersect(activity.tokens)
+            else -> activity.tokens.filterTo(linkedSetOf()) { ore -> ore.level == activity.tokens.maxOf { it.level } }
+        }.ifEmpty { activity.tokens }
+        return MineBotScript(bot, activity.tokens, getDuration(bot), zones, preferred)
     }
 
     /**
@@ -66,6 +78,11 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
         val efficient = bot.personality.isDextrous || bot.personality.isIntelligent
         val desired = (if (training) trainingOres(bot, level) else profitOres(bot, level)).let {
             if (level >= GEM_ROCK.level && (!training || !efficient)) it + GEM_ROCK else it
+        }.let {
+            // Coal cushions scarcity for metal collectors; essence and gem-only methods remain separate.
+            if (training && efficient && level >= MiningGuild.REQUIRED_LEVEL ||
+                level >= COAL.level && it.any { ore -> ore in setOf(SILVER, GOLD, MITHRIL, ADAMANT, RUNE) }) it + COAL
+            else it
         }
         val activities = ArrayList<BotSkillingActivity<Ore>>()
         for ((zone, supported) in rocks) {
@@ -84,7 +101,8 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
                 continue
             }
             val tokens = linkedSetOf<Ore>()
-            for (ore in desired) {
+            val mineOres = if (zone == SubZone.MINING_GUILD && training && efficient) setOf(COAL, MITHRIL) else desired
+            for (ore in mineOres) {
                 if (ore in supported && ore.level <= level) {
                     tokens.add(ore)
                 }
@@ -93,18 +111,13 @@ object MiningScriptFactory : SkillingScriptFactory(SKILL_MINING) {
                 activities.add(BotSkillingActivity(tokens = tokens, zones = setOf(zone)))
             }
         }
-        // A bot that just escaped an attacker in or near the guild mines elsewhere for a while.
-        val preferGuild = (if (training) efficient else bot.personality.isIntelligent) &&
-            bot.recentEscape?.avoids(SubZone.MINING_GUILD) != true
-        if (preferGuild) {
-            for (activity in activities) {
-                if (SubZone.MINING_GUILD in activity.zones) {
-                    return listOf(activity)
-                }
-            }
-        }
         return activities
     }
+
+    /** A recent escape prevents a guild preference from sending the bot straight back to an attacker. */
+    private fun prefersGuild(bot: Bot, training: Boolean): Boolean =
+        (if (training) bot.personality.isDextrous || bot.personality.isIntelligent else bot.personality.isIntelligent) &&
+                bot.recentEscape?.avoids(SubZone.MINING_GUILD) != true
 
     /**
      * Chooses training ores using the existing personality preferences.

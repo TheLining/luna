@@ -85,6 +85,9 @@ abstract class TargetingZonedBotScript<E : Entity>(
     /** Maximum discovery travel before abandoning a distant Mob candidate. */
     protected open val targetApproachTimeout: Duration = 30.seconds
 
+    /** Activities with changing resource priorities can request a fresh view for each selection. */
+    protected open val reuseTargetOptions: Boolean = true
+
     /** Monotonic clock, overridable for deterministic recovery tests. */
     protected open fun targetSearchTimeNanos(): Long = System.nanoTime()
 
@@ -158,7 +161,7 @@ abstract class TargetingZonedBotScript<E : Entity>(
             focus = null
             bot.log("Searching for a new target in $zone because ${invalidReason ?: "refocus was requested"}.")
 
-            if (lastOptions.isEmpty()) {
+            if (lastOptions.isEmpty() || !reuseTargetOptions) {
                 val searchRadius = zone.area.tileRadius
                 lastOptions = find(zone.area.centerPosition, searchRadius).toMutableList()
                 if (!targetActionReady()) return true
@@ -166,22 +169,7 @@ abstract class TargetingZonedBotScript<E : Entity>(
                 bot.log("Found ${lastOptions.size} target option(s) in $zone using search radius $searchRadius.")
             }
 
-            val dexterity = bot.personality.dexterity
-            val sortChance = dexterity * 0.75
-            val sortByDistance = rand(sortChance)
-
-            bot.log(
-                "Target option ordering roll: dexterity=$dexterity, sortChance=$sortChance, " +
-                        "rollPassed=$sortByDistance, options=${lastOptions.size}"
-            )
-
-            if (sortByDistance && lastOptions.size > 1) {
-                lastOptions.sortWith(LocatableDistanceComparator(bot))
-                bot.log("Sorted ${lastOptions.size} target option(s) by distance due to dexterity.")
-            } else {
-                lastOptions.shuffle()
-                bot.log("Shuffled ${lastOptions.size} target option(s); dexterity distance-sort did not trigger.")
-            }
+            orderTargetOptions(lastOptions)
 
             val iterator = lastOptions.iterator()
 
@@ -370,6 +358,22 @@ abstract class TargetingZonedBotScript<E : Entity>(
      * @return A mutable collection of candidate target entities.
      */
     abstract suspend fun find(searchBase: Position, searchRadius: Int): MutableCollection<E>
+
+    /** Orders a selection without changing the normal distance/shuffle behavior of other activities. */
+    protected open fun orderTargetOptions(options: MutableList<E>) {
+        val dexterity = bot.personality.dexterity
+        val sortChance = dexterity * 0.75
+        val sortByDistance = rand(sortChance)
+        bot.log("Target option ordering roll: dexterity=$dexterity, sortChance=$sortChance, " +
+                "rollPassed=$sortByDistance, options=${options.size}")
+        if (sortByDistance && options.size > 1) {
+            options.sortWith(LocatableDistanceComparator(bot))
+            bot.log("Sorted ${options.size} target option(s) by distance due to dexterity.")
+        } else {
+            options.shuffle()
+            bot.log("Shuffled ${options.size} target option(s); dexterity distance-sort did not trigger.")
+        }
+    }
 
     /**
      * Returns the interaction option used when attempting to interact with a target.

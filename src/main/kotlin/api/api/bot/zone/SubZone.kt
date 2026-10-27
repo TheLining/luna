@@ -417,16 +417,12 @@ enum class SubZone(
         parent = { FALADOR }),
 
     /**
-     * The Mining guild. Intended for high level miners.
-     * - 12 iron
-     * - 57 coal
-     * - 15 mithril
-     * - 10 adamant
-     * - 2 runite
+     * Original revision 377 Mining Guild chamber: 37 coal and 5 mithril rocks, requiring Mining 60.
+     * Bounds cover the guild ladder and chamber below Falador, south of the Dwarven Mine door at 3046,9756.
      */
     MINING_GUILD(
         inside = Position(3053, 9743),
-        area = SimpleBoxArea.ofRadius(2994, 9697, 73, 60),
+        area = SimpleBoxArea.of(3016, 9732, 3055, 9756),
         parent = { FALADOR }),
 
     /**

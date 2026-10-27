@@ -2,6 +2,7 @@ package game.bot.scripts.skills
 
 import io.luna.game.model.mob.bot.Bot
 import api.bot.script.BotScriptData
+import api.bot.Suspendable.waitFor
 import api.bot.script.ZonedBotScript.Companion.ZonedBotScriptData
 import api.bot.skill.SkillingBotScript
 import api.bot.skill.SkillingTool
@@ -17,10 +18,15 @@ import engine.bot.coordinator.skill.RunecraftingScriptFactory
 import engine.bot.coordinator.skill.SmithingScriptFactory
 import game.skill.mining.Ore
 import game.skill.mining.Pickaxe
+import game.skill.mining.mineOre.MineOreAction
+import game.content.miningGuild.MiningGuild
+import io.luna.game.model.EntityState
 import io.luna.game.model.Position
 import io.luna.game.model.`object`.GameObject
 import java.util.*
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * A [SkillingBotScript] that trains Mining by mining configured ore types inside selected zones.
@@ -28,19 +34,34 @@ import kotlin.time.Duration
  * This script supplies the Mining-specific pieces required by [SkillingBotScript], including valid rock object ids,
  * pickaxe selection, emergency pickaxe fallback, level requirements, and serialization data.
  *
- * While running, the bot searches for nearby matching rock objects and interacts with them through the normal skilling
- * script targeting flow. Crafting Guild sessions reserve the chest slot for an owned brown apron and recheck
+ * Prefers configured ores within a small cluster, uses fallback ores when they are unavailable or contested, and
+ * widens its visible search before scouting or moving mines. Kindness and confidence govern competition; dexterity
+ * governs patience. Active mining is never interrupted just because another rock becomes available.
+ * Crafting Guild sessions reserve the chest slot for an owned brown apron and recheck
  * the native entry requirements before every work-zone trip, including return travel after banking.
  *
  * @param bot The bot running this script.
  * @param ores The ore types this bot is allowed to mine.
  * @param duration How long this script should continue running before completing normally.
  * @param zones The candidate zones this script may operate in.
+ * @param preferredOres Preferred ores; other configured ores are fallbacks, ordered by their Mining requirement.
  *
  * @author lare96
  */
-class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: MutableList<SubZone>) :
+class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: MutableList<SubZone>,
+                    preferredOres: Set<Ore> = ores) :
     SkillingBotScript<GameObject>(bot, duration, zones, bot.mining) {
+
+    /** Other configured ores are fallbacks, ordered from the highest requirement down. */
+    val preferredOres: Set<Ore> = preferredOres.intersect(ores).ifEmpty { ores }
+    internal val behavior = MiningBehavior(bot.personality, this.preferredOres, ores)
+    override val targetSearchTimeout = behavior.searchTimeout
+    override val reuseTargetOptions = false
+
+    private var cluster: Position? = null
+    private var scoutTrips = 0
+    private val scouted = mutableListOf<Position>()
+    private val retryAfter = HashMap<Position, Long>()
 
     companion object {
 
@@ -56,15 +77,21 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
              * The ore types this script is allowed to mine.
              */
             var ores = emptySet<Ore>()
+            var preferredOres = emptySet<Ore>()
 
             override fun load(data: JsonObject) {
                 super.load(data)
                 ores = loadEnumSet("ores", data) { Ore.valueOf(it) }
+                // Older saves gave every configured ore equal priority.
+                preferredOres = if (data.has("preferredOres"))
+                    loadEnumSet("preferredOres", data) { Ore.valueOf(it) }.intersect(ores).ifEmpty { ores }
+                else ores
             }
 
             override fun save(data: JsonObject) {
                 super.save(data)
                 saveEnumSet("ores", data, ores)
+                saveEnumSet("preferredOres", data, preferredOres)
             }
         }
     }
@@ -75,7 +102,7 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
      * @param bot The bot running this script.
      * @param data The saved Mining script data to restore from.
      */
-    constructor(bot: Bot, data: MineData) : this(bot, data.ores, data.duration, data.zones)
+    constructor(bot: Bot, data: MineData) : this(bot, data.ores, data.duration, data.zones, data.preferredOres)
 
     /**
      * The rock object ids that match the configured [ores].
@@ -100,11 +127,132 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
 
     override suspend fun travelToWorkZone(zone: SubZone, bank: BankAccess): Boolean {
         if (zone == SubZone.CRAFTING_GUILD_MINE && !CraftingGuild.canEnter(bot)) return false
+        if (zone == SubZone.MINING_GUILD && bot.mining.level < MiningGuild.REQUIRED_LEVEL) return false
         return super.travelToWorkZone(zone, bank)
     }
 
+    /** Retains the factory's preferred destination even when the base initialization shuffles candidate zones. */
+    override fun selectWorkZone(): SubZone? = originalZones.firstOrNull {
+        it in zones && (it != SubZone.MINING_GUILD || bot.mining.level >= MiningGuild.REQUIRED_LEVEL)
+    }
+
+    override suspend fun onNewActiveZone(lastZone: SubZone?) { resetSearch() }
+
+    override suspend fun onBankOpenSkilling(initial: Boolean) { resetSearch() }
+
+    private fun resetSearch() {
+        cluster = null
+        scoutTrips = 0
+        scouted.clear()
+        retryAfter.clear()
+        behavior.settle()
+    }
+
+    /** Observes only visible rocks and players. The mine boundary also excludes neighboring chambers. */
     override suspend fun find(searchBase: Position, searchRadius: Int): MutableCollection<GameObject> {
-        return world.locator.findObjects(searchBase, searchRadius) { it.id in rockObjectIds }
+        if (!isActionSafe() || bot.inventory.isFull) return mutableListOf()
+        val zone = activeZone ?: return mutableListOf()
+        val origin = cluster?.takeIf { it.isWithinDistance(bot.position, Position.VIEWING_DISTANCE) }
+            ?: bot.position.also { cluster = it; behavior.settle() }
+        val now = System.nanoTime()
+        retryAfter.entries.removeIf { it.value <= now }
+        val miners = visibleMiners()
+        val candidates = world.locator.findObjects(bot.position, Position.VIEWING_DISTANCE) { rock ->
+            validRock(rock) && rock.position.isWithinDistance(origin, behavior.radius) &&
+                    rock.position !in retryAfter
+        }.mapNotNull { rock ->
+            val score = behavior.score(Ore.ROCK_MAP.getValue(rock.id), miners[rock.position] ?: 0,
+                                      bot.position.computeLongestDistance(rock.position))
+            score?.let { rock to it }
+        }.shuffled().sortedBy { it.second }.mapTo(mutableListOf()) { it.first }
+        if (candidates.isNotEmpty()) return candidates
+        if (behavior.expand()) {
+            bot.log("No suitable rocks in my cluster; expanding mining search to ${behavior.radius} tiles.")
+        } else if (scoutTrips < 2) {
+            scout(zone)
+        }
+        return mutableListOf()
+    }
+
+    /** find already ranked these rocks; the generic distance/shuffle ordering would lose ore preferences. */
+    override fun orderTargetOptions(options: MutableList<GameObject>) = Unit
+
+    /** A working rock remains the focus even if a better ore respawns during an unsuccessful swing. */
+    override suspend fun refocus(): Boolean = bot.actions.first(MineOreAction::class.java) == null
+
+    /** Pausing clears the cached focus; an unfinished native action still owns the next rock decision on resume. */
+    override suspend fun beforeZoneWork(): Boolean = bot.actions.first(MineOreAction::class.java) != null
+
+    private fun validRock(rock: GameObject): Boolean {
+        val zone = activeZone ?: return false
+        val ore = Ore.ROCK_MAP[rock.id] ?: return false
+        if (rock.state != EntityState.ACTIVE || rock.id !in rockObjectIds || ore.level > bot.mining.level ||
+            !zone.area.contains(rock.position) || !bot.position.isViewable(rock.position)) return false
+        if (zone == SubZone.MINING_GUILD) return bot.mining.level >= MiningGuild.REQUIRED_LEVEL
+        // The Dwarven Mine bounding box touches the separately gated guild chamber.
+        return !SubZone.MINING_GUILD.area.contains(rock.position)
+    }
+
+    /** Actual mining actions identify competitors, including human players; standing beside a rock doesn't claim it. */
+    private fun visibleMiners(): Map<Position, Int> =
+        world.locator.findPlayers(bot.position, Position.VIEWING_DISTANCE) {
+            it !== bot && it.state == EntityState.ACTIVE && it.position.isViewable(bot.position)
+        }.mapNotNull { player -> player.actions.first(MineOreAction::class.java)?.rockObj }
+            .filter { it.state == EntityState.ACTIVE && it.position.isViewable(bot.position) }
+            .groupingBy { it.position }.eachCount()
+
+    private fun canStart(rock: GameObject): Boolean =
+        isActionSafe() && !bot.inventory.isFull && validRock(rock) &&
+                behavior.score(Ore.ROCK_MAP.getValue(rock.id), visibleMiners()[rock.position] ?: 0, 0) != null
+
+    override suspend fun onAssignFocus(newFocus: GameObject): Boolean =
+        newFocus.position !in retryAfter && canStart(newFocus)
+
+    override suspend fun interactWithTarget(option: Int, target: GameObject): Boolean {
+        val experience = bot.mining.experience
+        val clicked = handler.interactions.interact(option, target) { canStart(target) }
+        // A click can reach the rock without starting mining. Confirm the native action, not an ore success deadline.
+        if (clicked) {
+            waitFor(3.seconds) {
+                bot.actions.first(MineOreAction::class.java)?.rockObj === target ||
+                        bot.mining.experience > experience || target.state != EntityState.ACTIVE || !isActionSafe()
+            }
+        }
+        val started = clicked && (bot.actions.first(MineOreAction::class.java)?.rockObj === target ||
+                bot.mining.experience > experience)
+        if (started) {
+            cluster = target.position
+            scoutTrips = 0
+            scouted.clear()
+            behavior.settle()
+        } else if (isActionSafe() && !bot.inventory.isFull && target.state == EntityState.ACTIVE) {
+            retryAfter[target.position] = System.nanoTime() + 20.seconds.inWholeNanoseconds
+        }
+        return started
+    }
+
+    /** Walk to a different visible part of this mine, without inspecting ore availability beyond the player's view. */
+    private suspend fun scout(zone: SubZone) {
+        if (!isActionSafe() || bot.inventory.isFull) return
+        val from = bot.position
+        val destinations = buildList {
+            for (dx in listOf(-10, 0, 10)) for (dy in listOf(-10, 0, 10)) {
+                if (dx == 0 && dy == 0) continue
+                val tile = from.translate(dx, dy)
+                if (zone.area.contains(tile) &&
+                    (zone == SubZone.MINING_GUILD || !SubZone.MINING_GUILD.area.contains(tile)) &&
+                    scouted.none { it.isWithinDistance(tile, MiningBehavior.LOCAL_RADIUS) } &&
+                    !world.collisionManager.isBlocked(tile, false)) add(tile)
+            }
+        }.shuffled()
+        scoutTrips++
+        scouted += from
+        if (destinations.isNotEmpty() &&
+            withTimeoutOrNull(15.seconds) { handler.webWalkToAny(destinations) } == true) {
+            cluster = bot.position
+            behavior.settle()
+            bot.log("Checking another mining cluster in $zone (scouting trip $scoutTrips of 2).")
+        }
     }
 
     override fun tools(): TreeSet<SkillingTool> =
@@ -118,6 +266,7 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
     override fun snapshot(): BotScriptData {
         val data = MineData()
         data.ores = ores
+        data.preferredOres = preferredOres
         data.duration = duration
         data.zones = originalZones.toMutableList()
         return data
