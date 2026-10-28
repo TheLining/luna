@@ -20,6 +20,7 @@ import engine.bot.coordinator.skill.RunecraftingScriptFactory
 import engine.bot.coordinator.skill.SmithingScriptFactory
 import engine.bot.speech.BotMiningSpeechPool
 import engine.bot.speech.BotMiningSpeechPool.Reaction
+import engine.bot.speech.MiningVoice
 import game.bot.scripts.skills.MiningBehavior.Style
 import game.skill.mining.Ore
 import game.skill.mining.Pickaxe
@@ -67,6 +68,14 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
     internal val behavior = MiningBehavior(bot.personality, this.preferredOres, ores)
     /** Only factory-selected iron training sessions discard ore; resource collection keeps banking. */
     val powerMining = powerMining && behavior.style == Style.POWER_MINER && ores == setOf(Ore.IRON)
+    /** How this bot talks at the rocks; it follows the mining style, and iron power miners brag about dropping. */
+    internal val voice = when (behavior.style) {
+        Style.KIND -> MiningVoice.KIND
+        Style.MEAN -> MiningVoice.MEAN
+        Style.COMPLAINER -> MiningVoice.COMPLAINER
+        Style.POWER_MINER -> if (this.powerMining) MiningVoice.IRON_TRAINER else MiningVoice.POWER_MINER
+        Style.BALANCED -> MiningVoice.BALANCED
+    }
     override val targetSearchTimeout = behavior.searchTimeout
     override val crowdedSearchLimit = behavior.crowdedSearchLimit
     override val reuseTargetOptions = false
@@ -267,9 +276,10 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         }
         if (contestedPreferred != null) {
             MiningArguments.consider(bot, contestedPreferred)
-            if (behavior.style == Style.KIND) BotMiningSpeechPool.react(bot, Reaction.YIELD)
-            else if (behavior.style == Style.COMPLAINER && ++frustrations >= 2)
-                BotMiningSpeechPool.react(bot, Reaction.CROWDED)
+            val ore = Ore.ROCK_MAP.getValue(contestedPreferred.id)
+            if (behavior.style == Style.KIND) BotMiningSpeechPool.react(bot, Reaction.YIELD, voice, ore)
+            else if (++frustrations >= behavior.complaintThreshold)
+                BotMiningSpeechPool.react(bot, Reaction.CROWDED, voice, ore)
         }
         val candidates = visibleRocks.mapNotNull { rock ->
             val score = behavior.score(Ore.ROCK_MAP.getValue(rock.id), miners[rock.position] ?: 0,
@@ -316,9 +326,15 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
         attemptedRock = null
         if (bot.mining.experience > attemptExperience) {
             if (Ore.ROCK_MAP[rock.id] in preferredOres) frustrations = 0
-        } else if (rock.state != EntityState.ACTIVE && behavior.style == Style.COMPLAINER && ++frustrations >= 2) {
-            BotMiningSpeechPool.react(bot, Reaction.LOST_ROCK)
+        } else if (rock.state != EntityState.ACTIVE && ++frustrations >= behavior.complaintThreshold) {
+            lostRock(rock)
         }
+    }
+
+    /** Said by every style once it has lost enough rocks, each in its own voice. */
+    private fun lostRock(rock: GameObject) {
+        val ore = Ore.ROCK_MAP[rock.id] ?: return
+        BotMiningSpeechPool.react(bot, Reaction.LOST_ROCK, voice, ore)
     }
 
     private fun validRock(rock: GameObject): Boolean {
@@ -366,12 +382,12 @@ class MineBotScript(bot: Bot, val ores: Set<Ore>, duration: Duration, zones: Mut
             MiningArguments.consider(bot, target)
             if (bot.actions.first(MineOreAction::class.java) == null) finishMiningAttempt()
             if (behavior.style == Style.MEAN && (visibleMiners()[target.position] ?: 0) > 0)
-                BotMiningSpeechPool.react(bot, Reaction.CONTEST)
+                BotMiningSpeechPool.react(bot, Reaction.CONTEST, voice, Ore.ROCK_MAP.getValue(target.id))
         } else if (isActionSafe() && !bot.inventory.isFull && target.state == EntityState.ACTIVE) {
             retryAfter[target.position] = System.nanoTime() + 20.seconds.inWholeNanoseconds
         } else if (isActionSafe() && target.state != EntityState.ACTIVE &&
-            behavior.style == Style.COMPLAINER && ++frustrations >= 2) {
-            BotMiningSpeechPool.react(bot, Reaction.LOST_ROCK)
+            ++frustrations >= behavior.complaintThreshold) {
+            lostRock(target)
         }
         return started
     }

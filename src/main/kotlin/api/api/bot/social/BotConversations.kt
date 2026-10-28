@@ -84,7 +84,8 @@ object BotConversations {
     }
 
     /**
-     * Acquires both participants atomically on the game thread. Each line alternates between first and second.
+     * Acquires both participants atomically on the game thread. Each line alternates between first and second,
+     * unless [speakers] names the speaker of every line (0 = first, 1 = second).
      * A caller may retain the returned handle to distinguish full delivery from cancellation in later scenarios.
      */
     fun start(first: Bot, second: Bot, lines: List<String>,
@@ -92,13 +93,14 @@ object BotConversations {
               clock: () -> Long = { System.nanoTime() / 1_000_000 },
               interaction: BotSocialInteractions.Session? = null,
               whileWorking: Boolean = false,
-              speechFactory: (String, Int) -> BotSpeech = { text, ticks -> BotSpeech(text, ticks) }): Conversation? {
+              speakers: List<Int> = emptyList()): Conversation? {
         if (first === second || lines.size !in 2..24 || lines.any { it.isBlank() || it.length > 80 } ||
+            speakers.isNotEmpty() && (speakers.size != lines.size || speakers.any { it !in 0..1 }) ||
             !availableTo(first, interaction, allowMovement, whileWorking) ||
             !availableTo(second, interaction, allowMovement, whileWorking) ||
             !near(first, second)) return null
         val session = Conversation(listOf(first, second), lines.toList(), allowMovement, clock, interaction,
-                                   whileWorking, speechFactory)
+                                   whileWorking, speakers.toList())
         if (!first.speechStack.reserveConversation(session) { session.valid() }) return null
         if (!second.speechStack.reserveConversation(session) { session.valid() }) {
             first.speechStack.releaseConversation(session)
@@ -153,8 +155,7 @@ object BotConversations {
                                              private val clock: () -> Long,
                                              private val interaction: BotSocialInteractions.Session?,
                                              private val whileWorking: Boolean = false,
-                                             private val speechFactory: (String, Int) -> BotSpeech =
-                                                 { text, ticks -> BotSpeech(text, ticks) }) {
+                                             private val speakers: List<Int> = emptyList()) {
         /**
          * Script identities captured at acquisition; a paused or replaced activity cannot keep talking.
          */
@@ -207,10 +208,10 @@ object BotConversations {
                 close()
                 return
             }
-            val speaker = bots[index % 2]
+            val speaker = bots[if (speakers.isEmpty()) index % 2 else speakers[index]]
             val ticks = (3 + lines[index].length / 6 + (1 - speaker.personality.social) * 6 + (0..3).random())
                 .toInt().coerceIn(4, 20)
-            val speech = speechFactory(lines[index], ticks)
+            val speech = BotSpeech(lines[index], ticks)
             if (!speaker.speechStack.speakConversation(this, speech)) {
                 close()
                 return

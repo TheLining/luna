@@ -43,6 +43,13 @@ internal class MiningBehavior(personality: BotPersonality, preferred: Set<Ore>, 
         Style.POWER_MINER -> 6
         Style.BALANCED -> 10
     }
+    /** Lost or taken rocks before the bot grumbles about it out loud. Complainers barely last two. */
+    val complaintThreshold = when (style) {
+        Style.COMPLAINER -> 2
+        Style.MEAN -> 3
+        Style.POWER_MINER, Style.BALANCED -> 4
+        Style.KIND -> 5
+    }
     private val localRadius = when (style) {
         Style.MEAN -> 8
         Style.POWER_MINER -> 4

@@ -8,15 +8,11 @@ import api.bot.zone.SubZone
 import api.predef.rand
 import api.predef.world
 import engine.bot.speech.BotMiningArgumentPool
-import engine.bot.speech.BotMiningArgumentPool.Opponent
 import game.bot.scripts.skills.MiningBehavior.Style
 import game.skill.mining.Ore
 import game.skill.mining.mineOre.MineOreAction
 import io.luna.game.model.EntityState
 import io.luna.game.model.mob.bot.Bot
-import io.luna.game.model.mob.bot.io.BotOutputMessageHandler.ChatColor
-import io.luna.game.model.mob.bot.io.BotOutputMessageHandler.ChatEffect
-import io.luna.game.model.mob.bot.speech.BotSpeech
 import io.luna.game.model.`object`.GameObject
 import java.util.EnumMap
 
@@ -57,21 +53,14 @@ internal object MiningArguments {
         // At most one 1.5% roll per 3–6 minutes of observed competition, never one roll per swing.
         if (!rand(0.015)) return
         val other = rival.scriptStack.current() as MineBotScript
+        // A mean miner starts it; between two complainers, whoever was already on the rock goes first.
         val first = if (script.behavior.style == Style.MEAN) bot else rival
         val second = if (first === bot) rival else bot
+        val firstScript = if (first === bot) script else other
         val secondScript = if (second === bot) script else other
-        val opponent = when {
-            script.behavior.style == Style.COMPLAINER && other.behavior.style == Style.COMPLAINER -> Opponent.GRUMBLERS
-            secondScript.powerMining -> Opponent.IRON_TRAINER
-            else -> Opponent.valueOf(secondScript.behavior.style.name)
-        }
-        val lines = BotMiningArgumentPool.select(first, second, opponent) ?: return
-        val conversation = BotConversations.start(first, second, lines, whileWorking = true,
-            speechFactory = { text, ticks ->
-                if (text.startsWith("hop worlds", ignoreCase = true))
-                    BotSpeech(text, ChatColor.RED, ChatEffect.SHAKE, ticks)
-                else BotSpeech(text, ticks)
-            }) ?: return
+        val argument = BotMiningArgumentPool.compose(firstScript.voice, secondScript.voice, ore) ?: return
+        val conversation = BotConversations.start(first, second, argument.lines, whileWorking = true,
+            speakers = argument.speakers) ?: return
         // Both participants cool down for 60–90 minutes, even if movement interrupts their exchange.
         first.nextMiningArgument = now + rand(6_000, 9_000)
         second.nextMiningArgument = now + rand(6_000, 9_000)
