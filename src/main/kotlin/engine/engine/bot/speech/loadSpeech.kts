@@ -12,6 +12,8 @@ on(ServerLaunchEvent::class) {
         BotReactionSpeechPool.load()
         BotPkingSpeechPool.load()
         BotPriceCheckSpeechPool.load()
+        BotMiningSpeechPool.load()
+        BotMiningArgumentPool.load()
     }
 }
 
