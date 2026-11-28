@@ -1,6 +1,7 @@
 package game.npc.spawn.portSarim
 
 import api.predef.*
+import game.content.goblinDiplomacy.GoblinDiplomacy
 import game.npc.spawn.Bartender
 import io.luna.game.model.mob.Player
 import io.luna.game.model.mob.dialogue.Expression
@@ -8,7 +9,7 @@ import io.luna.game.model.mob.dialogue.Expression
 /**
  * The bartender of the Rusty Anchor, Port Sarim.
  */
-val RUSTY_ANCHOR_BARTENDER = 734
+val RUSTY_ANCHOR_BARTENDER = GoblinDiplomacy.BARTENDER
 
 /**
  * A pint of beer.
@@ -22,10 +23,16 @@ val BEER_PRICE = 2
 
 npc1(RUSTY_ANCHOR_BARTENDER) {
     if (Bartender.holdsClueFor(plr, RUSTY_ANCHOR_BARTENDER)) return@npc1
-    plr.newDialogue()
-        .options("Could I buy a beer please?", { buyBeer(it) },
-                 "Not very busy in here today, is it?", { notBusy(it) })
-        .open()
+    val dialogue = plr.newDialogue()
+    if (GoblinDiplomacy.stage(plr) == 0) {
+        dialogue.options("Could I buy a beer please?", ::buyBeer, GoblinDiplomacy.ASK_RUMOUR, ::notBusy)
+    } else {
+        dialogue.options("Could I buy a beer please?", ::buyBeer, "Have you heard any more rumours in here?") {
+            it.newDialogue().player("Have you heard any more rumours in here?")
+                .npc(RUSTY_ANCHOR_BARTENDER, "No, it hasn't been very busy lately.").open()
+        }
+    }
+    dialogue.open()
 }
 
 /**
@@ -56,16 +63,15 @@ fun buyBeer(plr: Player) {
  * The bartender passes on the goblins' quarrel to [plr].
  */
 fun notBusy(plr: Player) {
-    // TODO Goblin Diplomacy: this conversation starts the quest. Once the quest exists, start it here, and after that
-    //  replace this option with "Have you heard any more rumours in here?" ("No, it hasn't been very busy lately.").
     plr.newDialogue()
-        .player("Not very busy in here today, is it?")
+        .player(GoblinDiplomacy.ASK_RUMOUR)
         .npc(RUSTY_ANCHOR_BARTENDER, Expression.SHIFTY,
              "No, it was earlier. There was a guy in here saying the",
              "goblins up by the mountain are arguing again. Of all", "things, about the colour of their armour.")
         .npc(RUSTY_ANCHOR_BARTENDER, Expression.ANGRY,
              "Knowing the goblins, it could easily turn into a full",
              "blown war. Which wouldn't be good. Goblin wars make", "such a mess of the countryside.")
-        .player("Well, if I have time, I'll see if I can go and knock some", "sense into them.")
+        .player(*GoblinDiplomacy.offerToInvestigate.toTypedArray())
+        .then(GoblinDiplomacy::start)
         .open()
 }

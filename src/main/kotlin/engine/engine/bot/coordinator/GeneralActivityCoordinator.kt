@@ -21,6 +21,7 @@ import game.bot.scripts.quests.MerlinsCrystalBotScript
 import game.bot.scripts.quests.ShieldOfArravBotScript
 import game.bot.scripts.ErnestTheChickenBotScript
 import game.bot.scripts.ImpCatcherBotScript
+import game.bot.scripts.GoblinDiplomacyBotScript
 import game.bot.scripts.TempleTrekkingBotScript
 import game.bot.scripts.GodBookBotScript
 import game.bot.scripts.TreasureTrailBotScript
@@ -117,6 +118,7 @@ object GeneralActivityCoordinator : BotCoordinator {
         if (VampireSlayerBotScript.eligible(bot)) return VampireSlayerBotScript(bot)
         if (PrinceAliRescueBotScript.eligible(bot)) return PrinceAliRescueBotScript(bot)
         if (ImpCatcherBotScript.eligible(bot)) return ImpCatcherBotScript(bot)
+        if (GoblinDiplomacyBotScript.eligible(bot)) return GoblinDiplomacyBotScript(bot)
         if (RomeoJulietBotScript.eligible(bot)) return RomeoJulietBotScript(bot)
         if (SheepShearerBotScript.eligible(bot)) return SheepShearerBotScript(bot)
         if (CooksAssistantBotScript.eligible(bot)) return CooksAssistantBotScript(bot)

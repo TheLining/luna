@@ -349,6 +349,17 @@ public final class DialogueQueueBuilder {
     }
 
     /**
+     * Attaches an action to the opening of the most recently appended dialogue.
+     */
+    public DialogueQueueBuilder onLastOpen(Consumer<Player> action) {
+        checkLocked();
+        DialogueInterface dialogue = dialogues.peekLast();
+        checkState(dialogue != null, "No dialogue to attach action to.");
+        dialogue.setOpenAction(action);
+        return this;
+    }
+
+    /**
      * Sets the title of the last appended dialogue, which must be an {@link OptionDialogue}.
      *
      * @param title The title.

@@ -19,6 +19,10 @@ enum class Dye(val id: Int, val colour: String, val cape: Int, val mixedFrom: Pa
 
     companion object {
 
+        const val ORANGE_GOBLIN_MAIL = 286
+        const val BLUE_GOBLIN_MAIL = 287
+        const val GOBLIN_MAIL = 288
+
         /**
          * The black cape. No dye makes one, but it can be dyed any other colour.
          */

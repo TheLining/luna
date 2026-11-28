@@ -3,7 +3,10 @@ package game.npc.spawn.draynor
 import api.predef.*
 import game.content.princeAliRescue.PrinceAliRescue
 import game.content.princeAliRescue.PrinceAliSupplies
+import game.player.Messages
 import game.player.Sound
+import game.skill.crafting.dyeing.AggieDye
+import game.skill.crafting.dyeing.AggieDye.Companion.DYE_PRICE
 import io.luna.game.model.item.Item
 import io.luna.game.model.mob.Npc
 import io.luna.game.model.mob.Player
@@ -22,11 +25,6 @@ val AGGIE = 922
 val COINS = 995
 
 /**
- * What Aggie charges for each dye.
- */
-val DYE_PRICE = 5
-
-/**
  * The pot of flour Aggie takes when a player who insults her has too few coins.
  */
 val POT_OF_FLOUR = 1933
@@ -40,25 +38,6 @@ val COIN_STACK = 1002
  * Aggie's hand wave when she takes a fine.
  */
 val WAVE = Animation(881)
-
-/**
- * A dye Aggie makes.
- *
- * @property colour The dye's colour.
- * @property dye The dye's item id.
- * @property ingredient The item she makes it from.
- * @property amount How many of [ingredient] she needs.
- * @property ingredientName What [ingredient] is called in her messages.
- * @property recipe What Aggie says the dye needs.
- */
-enum class AggieDye(val colour: String, val dye: Int, val ingredient: Int, val amount: Int, val ingredientName: String,
-                    vararg val recipe: String) {
-    RED("red", 1763, 1951, 3, "berries", "3 lots of redberries and 5 coins to you."),
-    YELLOW("yellow", 1765, 1957, 2, "onions",
-           "Yellow is a strange colour to get, comes from onion",
-           "skins. I need 2 onions and 5 coins to make yellow dye."),
-    BLUE("blue", 1767, 1793, 2, "woad leaves", "2 woad leaves and 5 coins to you.")
-}
 
 npc1(AGGIE) {
     val aggie = targetNpc
@@ -131,7 +110,7 @@ fun recipe(plr: Player, dye: AggieDye) {
     plr.newDialogue()
         .player(Expression.QUIZZICAL, "What do you need to make ${dye.colour} dye?")
         .npc(AGGIE, *dye.recipe)
-        .options("Okay, make me some ${dye.colour} dye please.", { make(it, dye) },
+        .options(dye.request, { make(it, dye) },
                  "I don't think I have all the ingredients yet.", {
                      it.newDialogue()
                          .player(Expression.CONFUSED, "I don't think I have all the ingredients yet.")
@@ -161,19 +140,26 @@ fun make(plr: Player, dye: AggieDye) {
         plr.inventory.computeAmountForId(COINS) < DYE_PRICE ->
             plr.newDialogue().text("You don't have enough coins to pay for the dye!").open()
         else -> plr.newDialogue()
-            .player("Okay, make me some ${dye.colour} dye please.")
-            .then {
-                if (it.inventory.computeAmountForId(dye.ingredient) >= dye.amount &&
-                    it.inventory.computeAmountForId(COINS) >= DYE_PRICE) {
-                    it.inventory.remove(Item(COINS, DYE_PRICE))
-                    it.inventory.remove(Item(dye.ingredient, dye.amount))
-                    it.inventory.add(Item(dye.dye))
-                    it.newDialogue()
-                        .give(Item(dye.dye), "You hand the ${dye.ingredientName} and payment to Aggie.\\n" +
-                                             "Aggie takes a ${dye.colour} bottle from nowhere\\nand hands it to you.",
-                              false)
-                        .open()
+            .player(dye.request)
+            .give(Item(dye.dye), "You hand the ${dye.ingredientName} and payment to Aggie.\\n" +
+                "Aggie takes a ${dye.colour} bottle from nowhere\\nand hands it to you.", false)
+            .onLastOpen {
+                val inventory = it.inventory
+                val ingredients = inventory.computeAmountForId(dye.ingredient)
+                val coins = inventory.computeAmountForId(COINS)
+                if (ingredients < dye.amount || coins < DYE_PRICE) {
+                    it.overlays.closeWindows()
+                    return@onLastOpen
                 }
+                if (inventory.isFull && inventory.stackable(dye.ingredient) &&
+                    ingredients > dye.amount && coins > DYE_PRICE) {
+                    it.overlays.closeWindows()
+                    it.sendMessage(Messages.inventoryFull())
+                    return@onLastOpen
+                }
+                check(inventory.remove(Item(COINS, DYE_PRICE)))
+                check(inventory.remove(Item(dye.ingredient, dye.amount)))
+                check(inventory.add(Item(dye.dye)))
             }
             .open()
     }

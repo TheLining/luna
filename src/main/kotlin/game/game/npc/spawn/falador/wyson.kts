@@ -87,20 +87,13 @@ fun woadDialogue(plr: Player, npc: Npc) {
             },
             "How about 20 coins?",
             {
-                plr.newDialogue()
+                val reply = plr.newDialogue()
                     .player("How about 20 coins?")
                     .npc(npc.id, Expression.HAPPY, "Okay, that's more than fair.")
-                    .then {
-                        if (it.inventory.computeAmountForId(COINS) < 20) {
-                            buyLeaves(it, npc, 20, 2)
-                        } else {
-                            it.newDialogue()
-                                .npc(npc.id, Expression.HAPPY, "Here, have two, you're a generous person.")
-                                .then { buyLeaves(it, npc, 20, 2) }
-                                .open()
-                        }
-                    }
-                    .open()
+                if (plr.inventory.computeAmountForId(COINS) >= 20) {
+                    reply.npc(npc.id, Expression.HAPPY, "Here, have two, you're a generous person.")
+                }
+                reply.then { buyLeaves(it, npc, 20, 2) }.open()
             }
         ).open()
 }

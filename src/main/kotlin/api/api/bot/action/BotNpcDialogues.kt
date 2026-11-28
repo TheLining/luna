@@ -54,8 +54,19 @@ object BotNpcDialogues {
                         playerSpeech: Set<String> = emptySet(), advanceSpeech: Boolean = false, speakerId: Int = npc.id,
                         textPages: Set<String>,
                         start: suspend () -> Boolean): Boolean =
+        respond(bot, npc, responses, timeout, allowed, completed, playerSpeech, advanceSpeech, speakerId, textPages,
+            emptySet(), start)
+
+    /**
+     * Recognizes additional NPC heads in the same conversation after the targeted NPC opens it.
+     */
+    suspend fun respond(bot: Bot, npc: Npc, responses: List<String>, timeout: Duration = 30.seconds,
+                        allowed: () -> Boolean = { true }, completed: () -> Boolean,
+                        playerSpeech: Set<String> = emptySet(), advanceSpeech: Boolean = false, speakerId: Int = npc.id,
+                        textPages: Set<String>, additionalSpeakers: Set<Int>,
+                        start: suspend () -> Boolean): Boolean =
         respondToSpeaker(bot, speakerId, responses, timeout, { npc.state == EntityState.ACTIVE && allowed() },
-            completed, playerSpeech, advanceSpeech, textPages, start)
+            completed, playerSpeech, advanceSpeech, textPages, additionalSpeakers, start)
 
     /**
      * Answers a native remote speaker, such as Brian speaking through the Mystic jewel, without inventing an NPC.
@@ -68,7 +79,8 @@ object BotNpcDialogues {
     suspend fun respondVirtual(bot: Bot, speakerId: Int, responses: List<String>, timeout: Duration = 30.seconds,
                                allowed: () -> Boolean = { true }, completed: () -> Boolean,
                                start: suspend () -> Boolean): Boolean =
-        respondToSpeaker(bot, speakerId, responses, timeout, allowed, completed, emptySet(), false, emptySet(), start)
+        respondToSpeaker(bot, speakerId, responses, timeout, allowed, completed, emptySet(), false, emptySet(),
+            emptySet(), start)
 
     /**
      * Shares exact queue, speaker and page ownership between physical and remote native conversations.
@@ -76,7 +88,8 @@ object BotNpcDialogues {
     private suspend fun respondToSpeaker(bot: Bot, speakerId: Int, responses: List<String>, timeout: Duration,
                                          allowed: () -> Boolean, completed: () -> Boolean,
                                          playerSpeech: Set<String>, advanceSpeech: Boolean,
-                                         textPages: Set<String>, start: suspend () -> Boolean): Boolean {
+                                         textPages: Set<String>, additionalSpeakers: Set<Int>,
+                                         start: suspend () -> Boolean): Boolean {
         val previous = bot.dialogues
         var queue: DialogueQueue? = null
         var page: DialogueInterface? = null
@@ -86,15 +99,15 @@ object BotNpcDialogues {
         var retrySpeechAt = 0L
         val previousReflex = advanceSpeech && bot.reflex.isDisableDialogueReflex
         fun safe() = ActionSafety.NON_COMBAT.allows(bot) && allowed()
-        fun speech(current: DialogueInterface): Boolean = when (current) {
-            is NpcDialogue -> current.npcId == speakerId
+        fun speech(current: DialogueInterface, continuing: Boolean = false): Boolean = when (current) {
+            is NpcDialogue -> current.npcId == speakerId || continuing && current.npcId in additionalSpeakers
             is PlayerDialogue -> current.lines.joinToString(" ").let { it == lastResponse || it in playerSpeech }
             is TextDialogue -> queue != null && current.text.joinToString(" ") in textPages
             else -> false
         }
         fun recognized(current: DialogueInterface): Boolean = when (current) {
             is OptionDialogue -> current === selectedPage || responses.getOrNull(next)?.let { it in current.options } == true
-            else -> speech(current)
+            else -> speech(current, continuing = true)
         }
         try {
             if (advanceSpeech) bot.reflex.isDisableDialogueReflex = true
@@ -142,7 +155,8 @@ object BotNpcDialogues {
                             selectedPage = current
                             lastResponse = response
                             next++
-                        } else if (advanceSpeech && (changed || bot.world.currentTick >= retrySpeechAt) && speech(current)) {
+                        } else if (advanceSpeech && (changed || bot.world.currentTick >= retrySpeechAt) &&
+                            speech(current, continuing = true)) {
                             if (!safe() || !bot.output.sendContinueDialogue()) return@withTimeoutOrNull false
                             retrySpeechAt = bot.world.currentTick + 2
                         }
