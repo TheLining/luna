@@ -24,9 +24,9 @@ import static java.util.Objects.requireNonNull;
  * an aim, which may claim a share of the skill roll (see {@link BotGoalsMemory#aimWeight}).
  * <p>
  * Almost everything fades by the bot's own time online, which is saved with the account. What a bot saw of the world
- * rather than of itself, such as a crowded place, fades by real time instead, and so do its feelings: being tired of
- * an activity and its outlook. World ticks restart at zero on every boot and are never stored here. Entries hold names
- * and ids, never live players.
+ * rather than of itself, such as a crowded place or a price, fades by real time instead, and so do its feelings: being
+ * tired of an activity and its outlook. World ticks restart at zero on every boot and are never stored here. Entries
+ * hold names and ids, never live players.
  *
  * @author TheLining
  */
@@ -93,6 +93,11 @@ public final class BotMemory {
     private final BotOutlookMemory outlook;
 
     /**
+     * What the bot has learned about the game.
+     */
+    private final BotKnowHowMemory knowHow;
+
+    /**
      * Every part, in the order they are saved.
      */
     private final List<BotMemoryPart> parts;
@@ -137,7 +142,8 @@ public final class BotMemory {
         diary = new BotDiaryMemory(this);
         goals = new BotGoalsMemory(this);
         outlook = new BotOutlookMemory(this);
-        parts = List.of(people, places, diary, goals, outlook);
+        knowHow = new BotKnowHowMemory(this);
+        parts = List.of(people, places, diary, goals, outlook, knowHow);
     }
 
     /**
@@ -204,6 +210,13 @@ public final class BotMemory {
      */
     public BotOutlookMemory getOutlook() {
         return outlook;
+    }
+
+    /**
+     * @return What the bot has learned about the game.
+     */
+    public BotKnowHowMemory getKnowHow() {
+        return knowHow;
     }
 
     /**

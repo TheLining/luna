@@ -59,6 +59,29 @@
  * Lines a bot may say after it gains a level while things have been going well for it, in place of a LEVEL_UP line.
  * Uses <skill> and <level>.
  *
+ * MONSTER_DEADLY:
+ * Lines a bot may say when a real player asks whether a monster is hard, if one has killed it. The monster tags are
+ * <monster> (its name in the plural, such as "hill giants"), <hit> (the biggest hit the bot has taken from one),
+ * <times> (how often one has killed the bot: "once", "twice", "3 times") and <style> (how it attacks: "melee",
+ * "range" or "mage"). A line with a tag the bot has nothing for is skipped.
+ *
+ * MONSTER_EASY:
+ * Lines a bot may say when asked whether a monster is hard, if it has killed plenty and never died to one. Uses the
+ * monster tags.
+ *
+ * MONSTER_FINE:
+ * Lines a bot may say when asked whether a monster is hard, if it has fought a few. Uses the monster tags.
+ *
+ * MONSTER_HIT:
+ * Lines a bot may say when a real player asks how hard a monster hits, if one has hurt it. Uses the monster tags.
+ *
+ * MONSTER_STYLE:
+ * Lines a bot may say when a real player asks how a monster attacks or what to pray against it. Uses the monster
+ * tags.
+ *
+ * MONSTER_UNKNOWN:
+ * Lines a bot may say when a real player asks about a monster it has not fought. Use <monster> to name it.
+ *
  * MOOD_BAD:
  * Lines a bot may say when a real player asks how it is doing, if things have been going badly. Use <why> to reference
  * the reason in a few words, such as "died twice" or "got scammed". A line whose <why> the bot doesn't have is skipped.
@@ -15554,6 +15577,122 @@
     "<level> <skill>!! so happy today",
     "<level> <skill> as well, what a day",
     "good day gets better, <level> <skill>"
+  ],
+  "MONSTER_DEADLY": [
+    "they killed me <times>",
+    "careful, died there <times>",
+    "died to them <times> lol",
+    "they got me <times>",
+    "harder than they look, died <times>",
+    "<monster> killed me <times>",
+    "bring food, they killed me <times>",
+    "yeah theyre hard, died <times>",
+    "dont ask, died <times>",
+    "i died to one <times>",
+    "ya they hit <hit>s, died <times>",
+    "pretty hard, they hit <hit>s",
+    "they hurt, got hit <hit> and died",
+    "died <times> so be careful",
+    "theyre nasty, died <times>",
+    "killed me <times>, bring good food",
+    "hard if ur low lvl, died <times>",
+    "yes lol died <times>"
+  ],
+  "MONSTER_EASY": [
+    "easy",
+    "theyre easy",
+    "nah easy",
+    "killed loads, easy",
+    "easy xp",
+    "not hard at all",
+    "theyre fine, killed loads",
+    "easy, ive killed tons",
+    "pretty easy",
+    "easy just bring some food",
+    "nah theyre easy",
+    "easy, they only hit <hit>s",
+    "theyre easy, max ive seen is <hit>",
+    "easy xp, killed tons",
+    "never died to one",
+    "nah, never died there",
+    "<monster> r easy",
+    "easy enough"
+  ],
+  "MONSTER_FINE": [
+    "not too bad",
+    "theyre ok",
+    "not bad",
+    "theyre alright",
+    "ok if u bring food",
+    "not that hard",
+    "theyre ok, bring food",
+    "depends on ur lvl",
+    "fine if ur careful",
+    "killed a few, not bad",
+    "theyre ok, hit <hit>s",
+    "not bad, they hit <hit> on me",
+    "ok i think, only killed a few",
+    "alright so far",
+    "not too hard",
+    "theyre ok just watch ur hp"
+  ],
+  "MONSTER_HIT": [
+    "they hit <hit>s",
+    "<hit>s",
+    "up to <hit> i think",
+    "ive been hit <hit> by one",
+    "<hit> on me",
+    "highest ive seen is <hit>",
+    "like <hit>",
+    "<hit> max i think",
+    "seen a <hit> off one",
+    "<monster> hit me for <hit> once",
+    "they hit <hit> on me",
+    "about <hit>",
+    "got hit a <hit> once",
+    "theyve hit me <hit>",
+    "<hit> is the most ive seen",
+    "biggest i took was <hit>",
+    "<hit> i think",
+    "they can hit <hit>",
+    "<hit>s if ur unlucky",
+    "took a <hit> off one"
+  ],
+  "MONSTER_STYLE": [
+    "pray <style>",
+    "they use <style>",
+    "<style>",
+    "its <style>",
+    "pray <style> there",
+    "<style>, pray against that",
+    "they hit with <style>",
+    "all <style> i think",
+    "<style> mostly",
+    "use protect from <style>",
+    "<monster> use <style>",
+    "<style> i think",
+    "protect from <style>",
+    "they <style> u",
+    "just <style>",
+    "pray <style> if u need to"
+  ],
+  "MONSTER_UNKNOWN": [
+    "never fought them",
+    "dunno never tried",
+    "no idea",
+    "idk never killed one",
+    "never tried them",
+    "dunno sry",
+    "idk",
+    "not sure, never fought one",
+    "never been",
+    "cant help, never fought them",
+    "no clue sry",
+    "never killed <monster>",
+    "idk never tried <monster>",
+    "dunno m8",
+    "not sure sry",
+    "never fought <monster>"
   ],
   "MOOD_BAD": [
     "not great",

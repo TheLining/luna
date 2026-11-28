@@ -19,6 +19,7 @@ import engine.trade.tradingWith
 import io.luna.game.model.EntityState
 import io.luna.game.model.item.Item
 import io.luna.game.model.mob.bot.Bot
+import io.luna.game.model.mob.bot.memory.BotKnowHowMemory.Lesson
 import io.luna.game.model.mob.bot.memory.BotOutlookMemory
 import io.luna.game.model.mob.bot.memory.BotPeopleMemory.Event
 import kotlinx.coroutines.withTimeoutOrNull
@@ -82,6 +83,40 @@ object BotTradeScams {
      */
     internal fun consentChance(intelligence: Double, feeling: Double): Double =
         ((0.9 - 0.85 * intelligence.coerceIn(0.0, 1.0)) * feeling.coerceIn(0.0, 1.0) * 2).coerceIn(0.0, 0.95)
+
+    /**
+     * How a prospective victim answers a pitch.
+     */
+    internal enum class Answer {
+
+        /**
+         * It goes along with the pitch.
+         */
+        AGREES,
+
+        /**
+         * It turns the pitch down, as it would have anyway.
+         */
+        REFUSES,
+
+        /**
+         * It would have gone along, and turns the pitch down because it has fallen for the trick before.
+         */
+        KNOWS_BETTER
+    }
+
+    /**
+     * Answers a pitch from one roll. A victim wise to the trick agrees that much less often.
+     *
+     * @param trusting The [consentChance] of a victim that never fell for the trick.
+     * @param wise How wise the victim is to the trick, from `0.0` to `1.0`.
+     * @param roll A roll from `0.0` to `1.0`.
+     */
+    internal fun answer(trusting: Double, wise: Double, roll: Double): Answer = when {
+        roll < trusting * (1.0 - wise.coerceIn(0.0, 1.0)) -> Answer.AGREES
+        roll < trusting -> Answer.KNOWS_BETTER
+        else -> Answer.REFUSES
+    }
 
     /**
      * Selects native tradeable, non-dynamic inventory coins or ordinary untrimmed metal armour.
@@ -163,10 +198,12 @@ object BotTradeScams {
          */
         fun decide() {
             if (trading || ended) return
-            if (!rand(consentChance(victim.personality.intelligence,
-                    victim.preferences.getFeelingsToward(actor.username)))) {
+            val answer = answer(consentChance(victim.personality.intelligence,
+                    victim.preferences.getFeelingsToward(actor.username)),
+                victim.memory.knowHow.wiseTo(Lesson.TRADE_SCAM), rand().nextDouble())
+            if (answer != Answer.AGREES) {
                 close()
-                dialogue(ScamSpeech.REFUSAL)
+                dialogue(if (answer == Answer.KNOWS_BETTER) ScamSpeech.WISE_REFUSAL else ScamSpeech.REFUSAL)
                 return
             }
             stock = basket(victim, kind)
@@ -231,6 +268,7 @@ object BotTradeScams {
             recorded = true
             victim.memory.people.remember(actor.username, Event.SCAMMED_ME)
             victim.memory.outlook.felt(BotOutlookMemory.Event.SCAMMED)
+            victim.memory.knowHow.learn(Lesson.TRADE_SCAM)
             BotReactions.reactToScammed(victim)
             victim.preferences.rebalanceWantedItems()
             actor.preferences.rebalanceWantedItems()

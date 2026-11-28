@@ -12,8 +12,9 @@ import kotlin.random.Random
  * - **When protection pays off.** Bosses always, and otherwise only monsters that can take a big share of the bot's
  * hitpoints in one round of hits. Confident bots need a bigger share before they bother.
  * - **Which protection.** Bots that know their monsters pray against the way the monster usually attacks, from the
- * start of the fight. Others copy the last hit they took, a moment after it lands. Unintelligent bots now and then
- * misread the fight and pick the wrong protection, until the next hit sets them straight.
+ * start of the fight, and so does any bot against a kind of monster it has fought before. Others copy the last hit
+ * they took, a moment after it lands. Unintelligent bots now and then misread the fight and pick the wrong protection,
+ * until the next hit sets them straight.
  * - **Boosts.** Only against tough monsters. Careless bots sometimes switch on a defence prayer they don't need too.
  * - **Saving points.** Intelligent bots keep some points back for an emergency, stop boosting well before that, and
  * switch everything off between kills. Others pray until their points run out and often leave prayers on.
@@ -22,7 +23,8 @@ import kotlin.random.Random
  * @property dexterity How quickly the bot reacts, from `0.0` to `1.0`.
  * @property threatShare The share of its hitpoints one round of hits must be able to take before protection pays off.
  * @property toughShare How high a monster's combat level must be, as a share of the bot's own, to be tough.
- * @property knowsStyles Whether the bot prays against the way its monster usually attacks, rather than the last hit.
+ * @property knowsStyles Whether the bot knows how a monster it has not fought usually attacks, rather than waiting
+ * for a hit.
  * @property tidy Whether the bot switches off prayers it no longer needs during the fight.
  * @property wasteful Whether the bot also switches on a defence prayer when boosting.
  * @author lare96

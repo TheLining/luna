@@ -2,6 +2,7 @@ package engine.bot.speech
 
 import api.bot.script.BotGoals.goalLine
 import engine.bot.speech.BotGreetings.lastGreetedBy
+import engine.bot.speech.BotMonsterQuestions.monsterLine
 import engine.bot.speech.BotReactionSpeechPool.ReactionSpeech
 import engine.bot.speech.BotReactions.lastImpressedBy
 import engine.bot.speech.BotReactions.lastRareDrop
@@ -18,7 +19,7 @@ import java.nio.file.Paths
  * to a [ReactionSpeech] category and contains short chat lines that can be selected when the matching event occurs.
  *
  * Some reaction lines support runtime tags. These tags are replaced when the line is selected, allowing reactions to
- * reference the relevant player, skill, level, drop, scammer, or the reason for the bot's mood.
+ * reference the relevant player, skill, level, drop, scammer, monster, or the reason for the bot's mood.
  *
  * @author lare96
  */
@@ -137,6 +138,50 @@ object BotReactionSpeechPool :
         LEVEL_UP_GOOD_RUN,
 
         /**
+         * Lines a bot may say when a real player asks whether a monster is hard, if one has killed it.
+         *
+         * Supports the monster tags: `<monster>`, `<hit>`, `<times>` and `<style>`.
+         */
+        MONSTER_DEADLY,
+
+        /**
+         * Lines a bot may say when a real player asks whether a monster is hard, if it has killed plenty and never
+         * died to one.
+         *
+         * Supports the monster tags.
+         */
+        MONSTER_EASY,
+
+        /**
+         * Lines a bot may say when a real player asks whether a monster is hard, if it has fought a few.
+         *
+         * Supports the monster tags.
+         */
+        MONSTER_FINE,
+
+        /**
+         * Lines a bot may say when a real player asks how hard a monster hits, if one has hurt it.
+         *
+         * Supports the monster tags.
+         */
+        MONSTER_HIT,
+
+        /**
+         * Lines a bot may say when a real player asks how a monster attacks or what to pray against it, if it has
+         * seen enough of its attacks.
+         *
+         * Supports the monster tags.
+         */
+        MONSTER_STYLE,
+
+        /**
+         * Lines a bot may say when a real player asks about a monster it has not fought.
+         *
+         * Supports `<monster>`.
+         */
+        MONSTER_UNKNOWN,
+
+        /**
          * Lines a bot may say when a real player asks how it is doing, if things have been going badly.
          *
          * Supports `<why>` for the reason in a few words.
@@ -213,6 +258,14 @@ object BotReactionSpeechPool :
                                ReactionSpeech.LEVEL_UP_GOOD_RUN)) {
             setTag(levelUp, "<skill>") { it.lastSkillAdvanced.first }
             setTag(levelUp, "<level>") { it.lastSkillAdvanced.second }
+        }
+        for (monster in listOf(ReactionSpeech.MONSTER_DEADLY, ReactionSpeech.MONSTER_EASY,
+                               ReactionSpeech.MONSTER_FINE, ReactionSpeech.MONSTER_HIT,
+                               ReactionSpeech.MONSTER_STYLE, ReactionSpeech.MONSTER_UNKNOWN)) {
+            setTag(monster, "<monster>") { it.monsterLine.monster }
+            setTag(monster, "<hit>") { it.monsterLine.hit }
+            setTag(monster, "<times>") { it.monsterLine.times }
+            setTag(monster, "<style>") { it.monsterLine.style }
         }
         setTag(ReactionSpeech.MOOD_BAD, "<why>") { BotMoodQuestions.why(it) }
         setTag(ReactionSpeech.MOOD_GOOD, "<why>") { BotMoodQuestions.why(it) }

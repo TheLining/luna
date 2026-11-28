@@ -153,7 +153,8 @@ class PvmPrayer(private val bot: Bot) {
         val habit = currentHabit()
         val danger = bot.monsterMemory.expectedMaxHit(target, habit.knowledge)
         val protection = if (protectionPaysOff(target.isBoss, danger, habit)) {
-            PROTECTION[MonsterStyles.usualStyle(target)]?.takeIf { it.level <= bot.prayer.staticLevel }
+            PROTECTION[MonsterStyles.usualStyle(target) ?: bot.monsterMemory.usualStyle(target)]
+                ?.takeIf { it.level <= bot.prayer.staticLevel }
         } else null
         return neededPrayers(setOf(target), habit, protection, melee)
     }
@@ -332,9 +333,11 @@ class PvmPrayer(private val bot: Bot) {
             // The game temporarily disabled protection prayers.
             return null
         }
-        if (habit.knowsStyles && knownStyle == null) {
+        if (knownStyle == null) {
+            // A bot that knows its monsters has the common knowledge. Any bot knows what it has seen for itself.
             val strongest = fight.opponents.maxBy { bot.monsterMemory.expectedMaxHit(it, habit.knowledge) }
-            knownStyle = MonsterStyles.usualStyle(strongest)
+            knownStyle = (if (habit.knowsStyles) MonsterStyles.usualStyle(strongest) else null)
+                ?: bot.monsterMemory.usualStyle(strongest)
         }
         val hit = lastHit(fight)
         val style = knownStyle ?: hit?.type ?: return null

@@ -4,6 +4,7 @@ import api.bot.isRealBot
 
 import api.attr.Attr
 import api.bot.action.BotCombatThreat
+import api.bot.action.eating.MonsterMemory.Companion.monsterMemory
 import api.bot.script.BotGoals
 import api.bot.script.BotGoals.goalLine
 import io.luna.game.model.mob.bot.Bot
@@ -13,6 +14,7 @@ import io.luna.game.event.impl.SkillChangeEvent
 import io.luna.game.model.def.ItemNicknameDefinition
 import io.luna.game.model.item.Item
 import io.luna.game.model.mob.Mob
+import io.luna.game.model.mob.Npc
 import io.luna.game.model.mob.Player
 import io.luna.game.model.mob.Skill
 import io.luna.game.model.mob.bot.brain.BotEmotion.EmotionType
@@ -157,6 +159,8 @@ object BotReactions {
                                            minutesFromNow(10)))
         if (killer is Player) {
             died.memory.people.remember(killer.username, Event.KILLED_ME)
+        } else if (killer is Npc) {
+            died.monsterMemory.killedBy(killer)
         }
         died.memory.outlook.felt(if (killer is Player) BotOutlookMemory.Event.KILLED_BY_PLAYER
                                  else BotOutlookMemory.Event.KILLED_BY_MONSTER)
@@ -195,6 +199,8 @@ object BotReactions {
             killer.memory.people.remember(victim.username, Event.KILLED_THEM)
             killer.memory.diary.killed()
             killer.memory.outlook.felt(BotOutlookMemory.Event.KILLED_PLAYER)
+        } else if (victim is Npc) {
+            killer.monsterMemory.killed(victim)
         }
         if (victim is Player || killer.actionHandler.combat.isThreat(victim, BotCombatThreat.Context.ACHIEVEMENT)) {
             val playerKill = victim is Player

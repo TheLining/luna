@@ -23,6 +23,7 @@ import io.luna.game.model.item.economy.ItemPriceData
 import io.luna.game.model.mob.Player
 import io.luna.game.model.mob.bot.Bot
 import io.luna.game.model.mob.bot.brain.BotEmotion.EmotionType
+import io.luna.game.model.mob.bot.memory.BotKnowHowMemory
 import io.luna.game.model.mob.bot.speech.BotSpeech
 import io.luna.util.GsonUtils
 import org.apache.logging.log4j.LogManager
@@ -43,10 +44,10 @@ import kotlin.math.roundToLong
  *
  * Anyone's price check can get up to two answers from bots that can see the speaker and aren't busy. Social bots
  * answer more often. A second bot sometimes follows, disagreeing if its own guess is far off. Answers come from the
- * world economy, shaped by personality: clever bots are close, dumb bots guess and greedy bots lowball. Each reply
- * waits roughly as long as reading the question and typing the answer takes, and is dropped if a real player answers
- * first or the bot gets busy. Replies only ever contain template text, item nicknames and prices, never the asker's
- * words.
+ * world economy, shaped by personality: clever bots are close, dumb bots guess and greedy bots lowball. A bot that has
+ * traded the item itself answers with what it last paid or got for it. Each reply waits roughly as long as reading
+ * the question and typing the answer takes, and is dropped if a real player answers first or the bot gets busy.
+ * Replies only ever contain template text, item nicknames and prices, never the asker's words.
  *
  * While a real player can see them, bots waiting at a [BotMarketplace] ask about something they own or want every 20
  * to 40 seconds per market, each bot at most once every few minutes. Their questions go through the same chat path as
@@ -133,6 +134,11 @@ object BotPriceChecks : BotChatHandler {
      * The chance that a second bot follows the first answer.
      */
     private const val SECOND_ANSWER_CHANCE = 0.4
+
+    /**
+     * The chance a bot that has traded the item says so ("paid 60k for mine"), rather than only naming its price.
+     */
+    private const val OWN_TRADE_CHANCE = 0.6
 
     /**
      * How far apart, as a fraction, two guesses must be before the second bot disagrees.
@@ -434,10 +440,18 @@ object BotPriceChecks : BotChatHandler {
         if (id in rares && !sampled(id)) {
             return line(bot, PriceCheckSpeech.RARE, name)?.let { Reply(it, null) }
         }
-        val estimate = estimate(bot, price(id))
+        val traded = traded(bot, id)
+        if (traded != null && rand(OWN_TRADE_CHANCE)) {
+            val own = traded.price.toDouble()
+            val suffix = if (quantity > 1) " ea" else ""
+            val kind = if (traded.bought) PriceCheckSpeech.PAID else PriceCheckSpeech.SOLD
+            return line(bot, kind, name, slang(bot, own) + suffix)?.let { Reply(it, own, 1, suffix) }
+        }
+        val estimate = traded?.price?.toDouble() ?: estimate(bot, price(id))
             ?: return line(bot, PriceCheckSpeech.NO_IDEA, name)?.let { Reply(it, null) }
         val personality = bot.personality
-        val kind = if (personality.isUncertain || personality.isDumb && randBoolean()) PriceCheckSpeech.UNSURE
+        val kind = if (personality.isUncertain || traded == null && personality.isDumb && randBoolean())
+            PriceCheckSpeech.UNSURE
         else PriceCheckSpeech.ANSWER
         if (quantity == 1) {
             return line(bot, kind, name, priceText(bot, estimate))?.let { Reply(it, estimate) }
@@ -452,7 +466,7 @@ object BotPriceChecks : BotChatHandler {
      */
     private fun quoteAll(bot: Bot, items: List<Int>): Reply? {
         val parts = items.filter { itemDef(it).isTradeable && (it !in rares || sampled(it)) }.mapNotNull { id ->
-            estimate(bot, price(id))?.let { "${ItemNicknameDefinition.getNickname(id)} ${slang(bot, it)}" }
+            figure(bot, id)?.let { "${ItemNicknameDefinition.getNickname(id)} ${slang(bot, it)}" }
         }
         val text = parts.joinToString(", ")
         return if (parts.isEmpty() || text.length > 80) null else Reply(text, null)
@@ -464,7 +478,7 @@ object BotPriceChecks : BotChatHandler {
      */
     private fun followUp(bot: Bot, id: Int, first: Reply): String? {
         val previous = first.estimate ?: return null
-        val own = estimate(bot, price(id)) ?: return null
+        val own = figure(bot, id) ?: return null
         fun said(price: Double) = slang(bot, price * first.scale) + first.suffix
         return when {
             abs(own / previous - 1) > DISAGREE_GAP -> line(bot, PriceCheckSpeech.DISAGREE, price = said(own))
@@ -472,6 +486,17 @@ object BotPriceChecks : BotChatHandler {
             else -> null
         }
     }
+
+    /**
+     * What a bot's own latest trade of an item went for, or `null` if it hasn't traded one it still remembers.
+     */
+    private fun traded(bot: Bot, id: Int): BotKnowHowMemory.Trade? =
+        bot.memory.knowHow.price(itemDef(id).unnotedId.orElse(id))
+
+    /**
+     * A bot's figure for an item: what its own latest trade went for, or else its guess at the economy's price.
+     */
+    private fun figure(bot: Bot, id: Int): Double? = traded(bot, id)?.price?.toDouble() ?: estimate(bot, price(id))
 
     /**
      * A bot's guess at [price]: clever bots are close, dumb bots guess wildly or don't know, and greedy bots lowball.

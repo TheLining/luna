@@ -1,8 +1,9 @@
 /*
  * Price check chat: questions bots ask at the markets, and the answers bots give to anyone who asks.
  *
- * <item> is the bot's own name for the item and <price> is its estimate ("60k", "1.2m", "180 ea"). Answers must never
- * read as a price check themselves, so bots can't keep answering each other. Every line must fit in 80 characters.
+ * <item> is the bot's own name for the item and <price> is its estimate ("60k", "1.2m", "180 ea"). In PAID and SOLD
+ * lines <price> is what the bot itself last paid or got. Answers must never read as a price check themselves, so
+ * bots can't keep answering each other. Every line must fit in 80 characters.
  */
 {
   "ASK": [
@@ -36,6 +37,29 @@
     "<price> or so",
     "not sure, <price>?",
     "i think <price>"
+  ],
+  "PAID": [
+    "paid <price> for mine",
+    "i paid <price>",
+    "got mine for <price>",
+    "bought mine for <price>",
+    "i got <item> for <price>",
+    "paid <price> last time",
+    "<price>, thats what i paid",
+    "cost me <price>",
+    "<price> is what i paid anyway",
+    "bought some for <price>"
+  ],
+  "SOLD": [
+    "sold mine for <price>",
+    "i sold <item> for <price>",
+    "got <price> for mine",
+    "sold some for <price>",
+    "<price>, sold mine for that",
+    "i got <price> for <item>",
+    "sold <item> for <price> last time",
+    "<price> is what i got for mine",
+    "some1 gave me <price> for mine"
   ],
   "NO_IDEA": [
     "idk",

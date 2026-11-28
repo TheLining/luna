@@ -130,7 +130,7 @@ private fun estimateNpc(npc: Npc, defender: Mob, capability: Boolean): CombatThr
         val total = definition.hitpoints.coerceIn(1, 1000)
         maximum = BarrowsCombat.dharokMaximum(maximum, if (capability) 1 else npc.health, total)
     }
-    if (defender.isRealBot()) maximum = maxOf(maximum, defender.monsterMemory.biggestHit(npc.id))
+    if (defender.isRealBot()) maximum = maxOf(maximum, defender.monsterMemory.biggestHit(npc))
     // A learned dominant style cannot establish that a custom attack never switches or bypasses protection.
     val styles = if (standard) listOf(CombatDamageType.MELEE) else CombatDamageType.entries
     var estimate = CombatThreatEstimate(0.0, 0, !standard)

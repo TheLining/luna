@@ -8,6 +8,7 @@ import io.luna.game.model.item.Item
 import io.luna.game.model.mob.Player
 import io.luna.game.model.mob.bot.Bot
 import io.luna.game.model.mob.bot.brain.BotActivity
+import io.luna.game.model.mob.bot.memory.BotKnowHowMemory.Lesson
 
 /**
  * Defines how carefully a bot validates another player's trade offer before accepting it.
@@ -137,6 +138,18 @@ enum class BotTradeScrutiny(
     companion object {
 
         /**
+         * The scrutiny a bot's own experience of being scammed calls for.
+         *
+         * @param wise How wise the bot is to trade scams, from `0.0` to `1.0`.
+         * @return [SMART] for a bot scammed once, [PARANOID] for one scammed again, otherwise the least strict level.
+         */
+        internal fun lessonScrutiny(wise: Double): BotTradeScrutiny = when {
+            wise >= 0.7 -> PARANOID
+            wise >= 0.4 -> SMART
+            else -> DUMB
+        }
+
+        /**
          * Resolves the scrutiny level a bot uses when trading with another player.
          *
          * First determines a baseline from the bot's intelligence, sociability, and merchanting
@@ -146,12 +159,15 @@ enum class BotTradeScrutiny(
          * The bot's feelings toward [other] provide a second scrutiny level. Disliked players may
          * require more careful validation, while liked players are assigned more trusting levels.
          *
-         * The stricter of the two levels is returned, so positive feelings cannot reduce the bot's
+         * A bot that has been scammed checks every trade more carefully, whoever it is with: [SMART] after
+         * falling for a scam once, [PARANOID] after a second time, until the lesson wears off.
+         *
+         * The strictest of the three levels is returned, so positive feelings cannot reduce the bot's
          * baseline scrutiny. Enum ordering determines strictness, with [PARANOID] being the strictest.
          *
          * @param bot The bot whose scrutiny level is being determined.
          * @param other The player trading with the bot.
-         * @return The stricter scrutiny level derived from personality and player feelings.
+         * @return The strictest scrutiny level derived from personality, player feelings and lessons.
          */
         fun resolveScrutinyFor(bot: Bot, other: Player): BotTradeScrutiny {
             // First determine desired scrutiny based on personality.
@@ -171,8 +187,10 @@ enum class BotTradeScrutiny(
                 bot.preferences.likesPlayer(other.username) -> TRUSTWORTHY
                 else -> scrutinyActivity
             }
+            // Then determine desired scrutiny based on what being scammed has taught the bot.
+            val scrutinyLesson = lessonScrutiny(bot.memory.knowHow.wiseTo(Lesson.TRADE_SCAM))
             // Whichever scrutiny level is higher is used (Enum ordered from highest (0) to lowest (enum size) scrutiny).
-            return if (scrutinyPlayer.ordinal <= scrutinyActivity.ordinal) scrutinyPlayer else scrutinyActivity
+            return minOf(scrutinyPlayer, scrutinyActivity, scrutinyLesson)
         }
     }
 

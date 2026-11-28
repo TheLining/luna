@@ -2880,6 +2880,7 @@ class TradeBotScript(bot: Bot,
         } else null
         if (planned != null) BotTradeIntentions.recordProductionPurchase(bot, planned, (own[COINS] ?: 0).toLong(),
             productionQuoteOwners[planned])
+        BotOwnPrices.remember(bot, quantities(own.toItems(), true), quantities(receiving.toItems(), true))
         quantities(own.toItems(), true).keys.filter { it != COINS }.forEach {
             BotMarketExperience.completed(bot, it, buying = false)
         }

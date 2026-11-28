@@ -29,8 +29,10 @@ on(ServerLaunchEvent::class) {
 // Register context injector for OTHER_LEVEL_UP reactions.
 BotReactions.reactToOtherLevelUp()
 
-// Bots answer price checks in public chat, and ask them at the markets.
+// Bots answer price checks in public chat, and ask them at the markets. Questions about monsters come first, as
+// "how much do hill giants hit" starts like a price check.
 BotChatRouter.add(PlayerTradeAdvertisementMarket.live)
+BotChatRouter.add(BotMonsterQuestions)
 BotChatRouter.add(BotPriceChecks)
 BotChatRouter.add(BotGoalQuestions)
 BotChatRouter.add(BotMoodQuestions)

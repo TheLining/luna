@@ -36,6 +36,16 @@ object BotPriceCheckSpeechPool :
         UNSURE,
 
         /**
+         * An answer from a bot that bought the item itself. Supports `<item>` and `<price>`, the price it paid.
+         */
+        PAID,
+
+        /**
+         * An answer from a bot that sold the item itself. Supports `<item>` and `<price>`, the price it got.
+         */
+        SOLD,
+
+        /**
          * No idea of the price.
          */
         NO_IDEA,

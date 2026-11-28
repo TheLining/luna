@@ -20,6 +20,7 @@ import io.luna.game.model.Position
 import io.luna.game.model.mob.Player
 import io.luna.game.model.mob.bot.Bot
 import io.luna.game.model.mob.bot.brain.BotPkPreference.Purpose
+import io.luna.game.model.mob.bot.memory.BotKnowHowMemory.Lesson
 import io.luna.game.model.mob.bot.memory.BotOutlookMemory
 import io.luna.game.model.mob.bot.memory.BotPeopleMemory.Event
 import kotlinx.coroutines.withTimeoutOrNull
@@ -136,6 +137,7 @@ object BotWildernessLures {
         if (fight.killer.username != fight.lurer) bot.memory.people.remember(fight.killer.username, Event.LURED_ME)
         bot.memory.people.remember(fight.lurer, Event.LURED_ME)
         bot.memory.outlook.felt(BotOutlookMemory.Event.LURED)
+        bot.memory.knowHow.learn(Lesson.WILDERNESS_LURE)
         BotReactions.reactToScammed(bot)
     }
 
@@ -204,11 +206,15 @@ object BotWildernessLures {
             speech.tick()
             if (!walking) {
                 if (!speech.ended) return
-                if (!speech.completed || !willingToRisk(victim) || !rand(BotTradeScams.consentChance(
-                        victim.personality.intelligence, victim.preferences.getFeelingsToward(actor.username)))
-                ) {
+                val answer = if (!speech.completed || !willingToRisk(victim)) BotTradeScams.Answer.REFUSES
+                else BotTradeScams.answer(BotTradeScams.consentChance(
+                    victim.personality.intelligence, victim.preferences.getFeelingsToward(actor.username)),
+                    victim.memory.knowHow.wiseTo(Lesson.WILDERNESS_LURE), rand().nextDouble())
+                if (answer != BotTradeScams.Answer.AGREES) {
                     close()
-                    BotScamSpeechPool.exchange(ScamSpeech.REFUSAL)?.let { BotConversations.start(actor, victim, it) }
+                    val refusal = if (answer == BotTradeScams.Answer.KNOWS_BETTER) ScamSpeech.LURE_WISE_REFUSAL
+                    else ScamSpeech.REFUSAL
+                    BotScamSpeechPool.exchange(refusal)?.let { BotConversations.start(actor, victim, it) }
                     return
                 }
                 walking = true

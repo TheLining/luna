@@ -16,6 +16,8 @@
  * The corresponding PITCH and SUCCESS pools contain complete alternating conversations, actor first.
  * SUCCESS means the actor kept the items after a native completed trade; it never means a real trim or doubling.
  * REFUSAL contains paired exchanges for victims who decide against trading. Keep every exchange even in length.
+ * WISE_REFUSAL and LURE_WISE_REFUSAL are the same for victims who would have agreed, had they not fallen for a trust
+ * trade or a Wilderness lure before.
  * LURE_PITCH and LURE_TRAVEL contain complete actor/victim exchanges; LURE_ADVERT contains invitation lines.
  */
 {
@@ -3149,6 +3151,106 @@
     [
       "Just a few more steps.",
       "I am starting to wish I stayed at the bank."
+    ]
+  ],
+  "WISE_REFUSAL": [
+    [
+      "So, shall we give it a try?",
+      "No. I fell for that once already."
+    ],
+    [
+      "It only takes a quick trade.",
+      "That is what the last one said."
+    ],
+    [
+      "You can trust me on this.",
+      "I trusted the last person who said that."
+    ],
+    [
+      "Last chance before I go!",
+      "Go on then. I learned my lesson."
+    ],
+    [
+      "No need to worry.",
+      "I lost my things not worrying last time."
+    ],
+    [
+      "Are you sure?",
+      "Very. I have been scammed before."
+    ],
+    [
+      "Could be your lucky day.",
+      "It was not lucky the last time."
+    ],
+    [
+      "Everyone is doing it.",
+      "I did it once. Never again."
+    ],
+    [
+      "You will thank me afterwards.",
+      "I am still waiting to thank the last one."
+    ],
+    [
+      "It is completely safe.",
+      "So I was told, right before I was robbed."
+    ],
+    [
+      "What have you got to lose?",
+      "Everything I hand over. I found that out."
+    ],
+    [
+      "Just trade me and see.",
+      "I have seen. Not falling for that again."
+    ]
+  ],
+  "LURE_WISE_REFUSAL": [
+    [
+      "Come on, it is only a short walk.",
+      "The last short walk got me killed."
+    ],
+    [
+      "So, are you coming?",
+      "No. I have been led up there before."
+    ],
+    [
+      "It is perfectly safe, I promise.",
+      "I was promised that last time too."
+    ],
+    [
+      "You can trust me on this.",
+      "I trusted the last one all the way to my grave."
+    ],
+    [
+      "Nobody ever goes up there.",
+      "Somebody was waiting the last time."
+    ],
+    [
+      "Last chance before I go!",
+      "Go without me. I learned my lesson."
+    ],
+    [
+      "Are you sure?",
+      "Very. I lost everything on a walk like that."
+    ],
+    [
+      "There is treasure in it for you.",
+      "There was a pker in it for me last time."
+    ],
+    [
+      "Bring your best gear, you will want it.",
+      "That is exactly what the last lurer said."
+    ],
+    [
+      "Just follow me, it is not far.",
+      "I am not falling for that again."
+    ],
+    [
+      "What is the worst that could happen?",
+      "I already know. It happened."
+    ],
+    [
+      "You look like you can handle yourself.",
+      "I thought so too, until the ambush."
     ]
   ]
 }
