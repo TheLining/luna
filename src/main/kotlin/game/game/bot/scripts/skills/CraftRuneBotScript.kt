@@ -215,6 +215,8 @@ class CraftRuneBotScript(bot: Bot, val altar: Altar, duration: Duration, val via
     }
 
     private var essenceBeforeAcquisition: Long? = null
+    /** The essence bought for the plan; by [finish], a chained plan has already moved on to its next recipe. */
+    private var acquiredEssence = -1
     private var purchaseRecorded = false
     private var altarRecorded = false
     private var craftRecorded = false
@@ -225,16 +227,16 @@ class CraftRuneBotScript(bot: Bot, val altar: Altar, duration: Duration, val via
 
     override fun onPlannedAcquisition(plan: ProductionPlan) {
         if (essenceBeforeAcquisition != null) return
-        essenceBeforeAcquisition = carriedAndBankedEssence(plan.recipe.materials.keys.single())
+        acquiredEssence = plan.recipe.materials.keys.single()
+        essenceBeforeAcquisition = carriedAndBankedEssence(acquiredEssence)
         BotProductionMetrics.recordRunecrafting(RunecraftingStage.ACQUISITION)
     }
 
     private fun recordPurchase() {
         val plan = productionPlan ?: return
         val before = essenceBeforeAcquisition ?: return
-        val id = plan.recipe.materials.keys.single()
         if (!purchaseRecorded && (plan.spentCoins > 0L) &&
-            carriedAndBankedEssence(id) > before) {
+            carriedAndBankedEssence(acquiredEssence) > before) {
             purchaseRecorded = true
             BotProductionMetrics.recordRunecrafting(RunecraftingStage.PURCHASE)
         }
@@ -727,8 +729,8 @@ class CraftRuneBotScript(bot: Bot, val altar: Altar, duration: Duration, val via
     override suspend fun finish() {
         withdrawRunnerOffer()
         if (isPaused()) return
-        recordPurchase()
         try {
+            recordPurchase()
             if (viaAbyss && bot.state == EntityState.ACTIVE && bot.isAlive) {
                 withContext(NonCancellable) { retreat() }
             }
