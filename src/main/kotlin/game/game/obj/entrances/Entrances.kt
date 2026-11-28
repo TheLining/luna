@@ -20,11 +20,12 @@ import io.luna.net.msg.out.WidgetItemModelMessageWriter
 object Entrances {
 
     /**
-     * Moves [plr] through [entrance].
+     * Moves [plr] through [entrance] and runs [onArrival] after they land.
      */
-    fun use(plr: Player, entrance: Entrance) {
+    @JvmOverloads
+    fun use(plr: Player, entrance: Entrance, onArrival: (Player) -> Unit = {}) {
         travel(plr, entrance.landing.from(plr.position), entrance.message, entrance.delay, entrance.arrival,
-               entrance.animation, entrance.arriveDelay, entrance.face)
+               entrance.animation, entrance.arriveDelay, entrance.face, onArrival)
     }
 
     /**

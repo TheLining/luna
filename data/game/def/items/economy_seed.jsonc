@@ -11,11 +11,6 @@
 */
 [
   {
-    "id": 0, // Dwarf remains
-    "initial_price": 25,
-    "initial_popularity": 60
-  },
-  {
     "id": 2, // Cannonball
     "initial_price": 233,
     "initial_popularity": 150

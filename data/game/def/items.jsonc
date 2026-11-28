@@ -5,6 +5,18 @@
 */
 [
   {
+    "id": 0, // Dwarf remains
+    "tradeable": false
+  },
+  {
+    "id": 1, // Tool kit
+    "tradeable": false
+  },
+  {
+    "id": 3, // Nulodion's notes
+    "tradeable": false
+  },
+  {
     "id": 4, // Ammo mould
     "weight": 4.0,
     "tradeable": true
@@ -28,6 +40,10 @@
     "id": 12, // Cannon furnace
     "weight": 5.0,
     "tradeable": true
+  },
+  {
+    "id": 14, // Railing
+    "tradeable": false
   },
   {
     "id": 16, // Magic whistle

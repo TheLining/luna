@@ -2,6 +2,8 @@ package game.content.dwarfMulticannon
 
 import api.predef.*
 import api.shop.dsl.ShopHandler
+import game.content.dwarfCannon.DwarfCannon
+import game.content.dwarfCannon.DwarfCannonDialogue
 import game.content.dwarfMulticannon.DwarfMulticannon.AMMO_MOULD
 import game.content.dwarfMulticannon.DwarfMulticannon.INSTRUCTION_MANUAL
 import game.content.dwarfMulticannon.DwarfMulticannon.NULODION
@@ -15,6 +17,7 @@ import io.luna.game.model.item.shop.Currency
 import io.luna.game.model.item.shop.RestockPolicy
 import io.luna.game.model.item.shop.ShopInterface
 import io.luna.game.model.mob.Player
+import io.luna.game.model.mob.dialogue.DialogueQueueBuilder.DialogueOption
 import io.luna.game.model.mob.dialogue.Expression
 
 /**
@@ -85,8 +88,7 @@ fun askToBuy(plr: Player) {
     plr.newDialogue()
         .player("I was hoping you might sell me a cannon.")
         .npc(NULODION, "Hmmmmmm...")
-        .npc(NULODION, "I shouldn't really, but as you helped us so much,",
-             "well, I could sort something out.",
+        .npc(NULODION, "I could sort something out for you.",
              "I'll warn you though, they don't come cheap.")
         .player("How much?")
         .npc(NULODION, "For the full set up... 750,000 coins.",
@@ -184,17 +186,26 @@ fun replaceCannon(plr: Player) {
         }.open()
 }
 
+npc3(NULODION) { openShop(plr) }
+
 npc1(NULODION) {
-    plr.newDialogue()
-        .player("Hello.")
-        .npc(NULODION, "Hello traveller, how's things?")
-        .player("Not bad thanks, yourself?")
-        .npc(NULODION, "I'm good, just working hard as usual...")
-        .options("I was hoping you might sell me a cannon?", { askToBuy(it) },
-                 "Well, take care of yourself then.", {
-                     plr.newDialogue().player("Well, take care of yourself then.").open()
-                 },
-                 "I want to know more about the cannon.", { askAboutCannon(it) },
-                 "I've lost my cannon.", { replaceCannon(it) })
-        .open()
+    val options = mutableListOf(
+        DialogueOption("I was hoping you might sell me a cannon?", ::askToBuy),
+        DialogueOption("Well, take care of yourself then.") {
+            it.newDialogue().player("Well, take care of yourself then.").open()
+        },
+        DialogueOption("I want to know more about the cannon.", ::askAboutCannon),
+        DialogueOption("I've lost my cannon.", ::replaceCannon)
+    )
+    val dialogue = plr.newDialogue()
+    if (DwarfCannon.stage(plr) in DwarfCannon.VISIT_ENGINEER..DwarfCannon.RETURN_SUPPLIES) {
+        options += DialogueOption(DwarfCannon.ASK_ENGINEER, DwarfCannonDialogue::engineer)
+        dialogue.npc(NULODION, "Can I help you, traveller?")
+    } else {
+        dialogue.player("Hello.")
+            .npc(NULODION, "Hello traveller, how's things?")
+            .player("Not bad thanks, yourself?")
+            .npc(NULODION, "I'm good, just working hard as usual...")
+    }
+    dialogue.options(options).open()
 }

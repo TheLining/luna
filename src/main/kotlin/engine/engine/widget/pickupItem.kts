@@ -1,6 +1,7 @@
 package engine.widget
 
 import api.predef.*
+import game.content.dwarfCannon.DwarfCannon
 import game.content.mageArena.MageArena
 import game.content.heroesQuest.HeroesProofs
 import game.content.heroesQuest.HeroesQuest
@@ -45,6 +46,8 @@ on(PickupItemEvent::class, EventPriority.HIGH, InteractionPolicy.GROUND_ITEM_PIC
         }
         pickupItem.id == WEREWOLF_STICK && plr.inventory.contains(WEREWOLF_STICK) ->
             plr.sendMessage("That's somebody else's stick!")
+        pickupItem.id == DwarfCannon.REMAINS && !DwarfCannon.canTakeRemains(plr) ->
+            plr.sendMessage("You don't need to pick up those remains.")
         !TreasureTrails.canAcquire(plr, pickupItem.id) -> Unit
         pickupItem.id == HeroesQuest.FIRE_FEATHER && !HeroesProofs.canTakeFeather(plr) -> Unit
         ZamorakWine.onPickup(plr, groundItem) -> Unit

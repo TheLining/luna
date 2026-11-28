@@ -57,7 +57,7 @@ object QuestDoors {
      * separate open object, so the same one is shown turned.
      */
     val doors: Map<Int, Int> = mapOf(
-        // TODO Dwarf Cannon: the Captain's task.
+        // The Black Guard's cannon shed is open to ordinary passage.
         4 to 2527,
         // TODO Holy Grail: the magic whistles and Merlin's workshop stage.
         22 to 1535, 24 to 1535,

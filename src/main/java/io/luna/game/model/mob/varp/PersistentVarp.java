@@ -10,6 +10,8 @@ import io.luna.game.model.mob.Player;
  * @author lare96
  */
 public enum PersistentVarp {
+    DWARF_CANNON(0),
+    DWARF_CANNON_REPAIRS(1),
     COAL_TRUCKS(6),
     MERLINS_CRYSTAL(14),
     MERLINS_CRYSTAL_COMPONENTS(15),

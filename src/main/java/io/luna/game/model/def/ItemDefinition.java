@@ -231,10 +231,10 @@ public final class ItemDefinition implements Definition {
      * Returns {@code true} if the given id is within the valid item id bounds for this cache.
      *
      * @param id The id to test.
-     * @return {@code true} if {@code id} is within {@code (0, SIZE)}.
+     * @return {@code true} if {@code id} is within {@code [0, SIZE)}.
      */
     public static boolean isIdValid(int id) {
-        return id > 0 && id < SIZE;
+        return id >= 0 && id < SIZE;
     }
 
     /**

@@ -134,7 +134,6 @@ enum class Entrance(val id: Int,
                      message = "You walk back out of the darkness of the cave into daylight."),
 
     // The goblin cave north of Hemenster (Dwarf Cannon).
-    // TODO Once Dwarf Cannon is added, entering while looking for the goblin cave moves the quest on.
     DWARF_CANNON_CAVE_IN(id = 2, landing = tile(2620, 9797), delay = 2, arrival = "You cautiously enter the cave."),
     DWARF_CANNON_CAVE_OUT(id = 13, landing = tile(2623, 3391), delay = 1, animation = 828),
 

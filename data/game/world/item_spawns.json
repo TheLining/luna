@@ -1,5 +1,14 @@
 [
   {
+    "id": 0,
+    "amount": 1,
+    "position": {
+      "x": 2567,
+      "y": 3444,
+      "z": 2
+    }
+  },
+  {
     "id": 946,
     "amount": 1,
     "position": {

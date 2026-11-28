@@ -2,6 +2,7 @@ package game.obj.entrances
 
 import api.predef.*
 import api.predef.ext.*
+import game.content.dwarfCannon.DwarfCannon
 import game.obj.doors.QuestDoors
 
 /**
@@ -40,6 +41,8 @@ for (id in Entrance.BY_ID.keys) {
             } else {
                 plr.sendMessage("Nothing interesting happens.")
             }
+        } else if (entrance == Entrance.DWARF_CANNON_CAVE_IN) {
+            Entrances.use(plr, entrance, DwarfCannon::enterCave)
         } else {
             Entrances.use(plr, entrance)
         }
