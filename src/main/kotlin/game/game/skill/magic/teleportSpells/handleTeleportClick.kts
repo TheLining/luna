@@ -2,6 +2,7 @@ package game.skill.magic.teleportSpells
 
 import api.predef.*
 import game.content.randomEvents.RandomEvents
+import game.skill.magic.Magic.findLandingTile
 import game.skill.magic.teleportSpells.TeleportAction.Companion.teleportDelay
 import io.luna.util.StringUtils
 
@@ -12,6 +13,11 @@ import io.luna.util.StringUtils
 val generalEventSpells = setOf(TeleportSpell.VARROCK, TeleportSpell.LUMBRIDGE, TeleportSpell.FALADOR,
     TeleportSpell.CAMELOT, TeleportSpell.ARDOUGNE, TeleportSpell.WATCHTOWER)
 
+/**
+ * How far from a spell's destination the player may land.
+ */
+val LANDING_RADIUS = 2
+
 /* Intercept all button clicks.*/
 for (spell in TeleportSpell.VALUES) {
     button(spell.button) {
@@ -19,7 +25,7 @@ for (spell in TeleportSpell.VALUES) {
             plr.submitAction(object : TeleportAction(plr,
                                                      spell.level,
                                                      spell.xp,
-                                                     spell.destination,
+                                                     findLandingTile(spell.destination, LANDING_RADIUS),
                                                      spell.style,
                                                      spell.requirements) {
                 override fun beforeLock(): Boolean = super.beforeLock() &&
